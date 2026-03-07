@@ -133,6 +133,12 @@ export interface PlatformAdapter {
 	 * @param channelId 频道 ID
 	 */
 	abortChannel(channelId: string): void;
+
+	/**
+	 * 获取 adapter 默认模型
+	 * @returns 默认模型 ID，如果未配置则返回 undefined
+	 */
+	getDefaultModel?(): string | undefined;
 }
 
 /**

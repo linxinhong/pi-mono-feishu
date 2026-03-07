@@ -48,6 +48,8 @@ export interface AgentConfig {
 	eventBus?: any;
 	/** Hook 管理器 */
 	hookManager?: HookManager;
+	/** adapter 级别默认模型 */
+	adapterDefaultModel?: string;
 }
 
 /**
@@ -338,7 +340,7 @@ export class CoreAgent {
 		const workspacePath = this.config.executor.getWorkspacePath(
 			join(channelDir, "..", ".."),
 		);
-		const model = await this.config.modelManager.getModelInstance(chatId);
+		const model = await this.config.modelManager.getModelInstance(chatId, this.config.adapterDefaultModel);
 
 		// 创建或获取 MemoryStore
 		if (!state.memoryStore) {
@@ -543,7 +545,7 @@ export class CoreAgent {
 	 * 获取当前模型
 	 */
 	async getCurrentModel(channelId?: string): Promise<Model<Api>> {
-		return this.config.modelManager.getModelInstance(channelId);
+		return this.config.modelManager.getModelInstance(channelId, this.config.adapterDefaultModel);
 	}
 }
 

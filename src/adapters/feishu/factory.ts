@@ -120,6 +120,7 @@ export const feishuAdapterFactory: AdapterFactory = {
 			store,
 			pluginManager,
 			port: config.port,
+			defaultModel: config.model,
 		});
 
 		return bot;

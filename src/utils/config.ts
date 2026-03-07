@@ -64,8 +64,14 @@ export interface CommonConfig {
 	model?: string;
 }
 
+/** 平台配置基础接口 */
+export interface PlatformConfigBase {
+	/** adapter 级别默认模型 */
+	model?: string;
+}
+
 /** 平台配置（任意平台可扩展） */
-export interface PlatformConfig {
+export interface PlatformConfig extends PlatformConfigBase {
 	[key: string]: unknown;
 }
 

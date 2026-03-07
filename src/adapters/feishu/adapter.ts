@@ -43,6 +43,8 @@ export interface FeishuAdapterConfig extends PlatformConfig {
 	port?: number;
 	/** 日志器 */
 	logger?: Logger;
+	/** adapter 级别默认模型 */
+	model?: string;
 }
 
 /**
@@ -92,6 +94,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	private app: ReturnType<typeof express> | null = null;
 	private workingDir: string;
 	private logger: Logger;
+	private defaultModel: string | undefined;
 
 	private users = new Map<string, UserInfo>();
 	private channels = new Map<string, ChannelInfo>();
@@ -104,6 +107,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	constructor(config: FeishuAdapterConfig) {
 		this.workingDir = config.workingDir;
 		this.logger = config.logger || new PiLogger("feishu:adapter");
+		this.defaultModel = config.model;
 
 		this.client = new lark.Client({
 			appId: config.appId,
@@ -119,7 +123,7 @@ export class FeishuAdapter implements PlatformAdapter {
 			});
 		}
 
-		this.logger.debug("FeishuAdapter initialized", { appId: config.appId });
+		this.logger.debug("FeishuAdapter initialized", { appId: config.appId, defaultModel: this.defaultModel });
 	}
 
 	// ========================================================================
@@ -286,6 +290,10 @@ export class FeishuAdapter implements PlatformAdapter {
 			running.abort();
 			this.runningChannels.delete(channelId);
 		}
+	}
+
+	getDefaultModel(): string | undefined {
+		return this.defaultModel;
 	}
 
 	// ========================================================================

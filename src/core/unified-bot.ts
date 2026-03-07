@@ -32,6 +32,8 @@ export interface UnifiedBotConfig {
 	pluginManager: PluginManager;
 	/** 端口号 */
 	port?: number;
+	/** 全局默认模型 ID（来自 config.json 的 model 字段） */
+	defaultModel?: string;
 }
 
 // ============================================================================
@@ -59,8 +61,11 @@ export class UnifiedBot {
 		this.pluginManager = config.pluginManager;
 		this.adapter = config.adapter;
 
-		// 创建模型管理器
-		this.modelManager = new ModelManager();
+		// 创建模型管理器（使用配置中的默认模型）
+		this.modelManager = new ModelManager(undefined, config.defaultModel);
+
+		// 获取 adapter 默认模型
+		const adapterDefaultModel = this.adapter.getDefaultModel?.();
 
 		// 创建核心 Agent
 		this.coreAgent = createCoreAgent({
@@ -68,6 +73,7 @@ export class UnifiedBot {
 			executor: createExecutor({ type: "host" }),
 			workspaceDir: config.workingDir,
 			eventBus: null, // 可以传入 EventBus
+			adapterDefaultModel,
 		});
 
 		// 订阅适配器消息

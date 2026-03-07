@@ -111,6 +111,7 @@ export async function createFeishuBot(options?: FeishuBotOptions): Promise<Unifi
 		store,
 		pluginManager,
 		port: config.port,
+		defaultModel: config.model,
 	});
 
 	return bot;
