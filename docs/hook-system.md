@@ -471,6 +471,22 @@ interface ToolCalledContext extends ToolCallContext {
 }
 ```
 
+### 系统提示词
+
+| Hook 名称 | 常量 | 触发时机 |
+|-----------|------|---------|
+| `system-prompt:build` | `SYSTEM_PROMPT_BUILD` | 系统提示词生成后 |
+
+**Context 类型：** `SystemPromptBuildContext`
+
+```typescript
+interface SystemPromptBuildContext {
+  channelId: string;
+  prompt: string;
+  timestamp: Date;
+}
+```
+
 ## 最佳实践
 
 ### 1. 选择正确的触发方法

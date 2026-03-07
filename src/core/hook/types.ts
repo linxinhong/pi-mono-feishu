@@ -134,6 +134,9 @@ export const HOOK_NAMES = {
 	// Tools 调用（通用）
 	TOOL_CALL: "tool:call",
 	TOOL_CALLED: "tool:called",
+
+	// 系统提示词
+	SYSTEM_PROMPT_BUILD: "system-prompt:build",
 } as const;
 
 export type HookName = (typeof HOOK_NAMES)[keyof typeof HOOK_NAMES];
@@ -239,6 +242,15 @@ export interface ToolCalledContext extends ToolCallContext {
 	duration: number;
 }
 
+/**
+ * 系统提示词生成上下文
+ */
+export interface SystemPromptBuildContext {
+	channelId: string;
+	prompt: string;
+	timestamp: Date;
+}
+
 // ============================================================================
 // Type Map
 // ============================================================================
@@ -263,4 +275,5 @@ export interface HookContextMap {
 	[HOOK_NAMES.EVENT_TRIGGERED]: EventTriggeredContext;
 	[HOOK_NAMES.TOOL_CALL]: ToolCallContext;
 	[HOOK_NAMES.TOOL_CALLED]: ToolCalledContext;
+	[HOOK_NAMES.SYSTEM_PROMPT_BUILD]: SystemPromptBuildContext;
 }

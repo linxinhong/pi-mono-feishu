@@ -211,9 +211,19 @@ export class CoreAgent {
 				[],
 				"",
 			);
+
+			// 触发 SYSTEM_PROMPT_BUILD hook
+			const hookManager = this.config.hookManager;
+			if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
+				await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
+					channelId: chatId,
+					prompt: systemPrompt,
+					timestamp: new Date(),
+				});
+			}
+
 			const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
 			const sessionId = `${chatId}-${Date.now()}`;
-			const hookManager = this.config.hookManager;
 
 			// 触发 SESSION_CREATE hook
 			if (hookManager?.hasHooks(HOOK_NAMES.SESSION_CREATE)) {
@@ -425,6 +435,16 @@ export class CoreAgent {
 		};
 		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
 
+		// 触发 SYSTEM_PROMPT_BUILD hook
+		const hookManager = this.config.hookManager;
+		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
+			await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
+				channelId: chatId,
+				prompt: systemPrompt,
+				timestamp: new Date(),
+			});
+		}
+
 		// 创建 ModelRegistry（必须在 Agent 之前，因为 getApiKey 需要用到）
 		state.modelRegistry = this.config.modelManager.getRegistry();
 
@@ -485,6 +505,17 @@ export class CoreAgent {
 		};
 
 		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
+
+		// 触发 SYSTEM_PROMPT_BUILD hook
+		const hookManager = this.config.hookManager;
+		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
+			await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
+				channelId: chatId,
+				prompt: systemPrompt,
+				timestamp: new Date(),
+			});
+		}
+
 		state.agent!.setSystemPrompt(systemPrompt);
 	}
 
