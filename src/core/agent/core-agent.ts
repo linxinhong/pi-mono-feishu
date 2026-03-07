@@ -352,12 +352,14 @@ export class CoreAgent {
 		const { createReadTool } = await import("../tools/read.js");
 		const { createWriteTool } = await import("../tools/write.js");
 		const { createEditTool } = await import("../tools/edit.js");
+		const { createModelsTool } = await import("../tools/models.js");
 
 		const tools = [
 			createBashTool(this.config.executor),
 			createReadTool(this.config.executor),
 			createWriteTool(this.config.executor),
 			createEditTool(this.config.executor),
+			createModelsTool(this.config.modelManager),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, workspacePath),
 		];
