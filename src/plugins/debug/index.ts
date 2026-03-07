@@ -16,6 +16,10 @@ import type {
 	SessionHookContext,
 	EventTriggerContext,
 	EventTriggeredContext,
+	EventCreateContext,
+	EventDeleteContext,
+	EventLoadContext,
+	EventScheduleContext,
 	ToolCallContext,
 	ToolCalledContext,
 	SystemPromptBuildContext,
@@ -190,6 +194,38 @@ class DebugPluginImpl implements Plugin {
 		hookManager.on<EventTriggeredContext>(HOOK_NAMES.EVENT_TRIGGERED, async (ctx, next) => {
 			this.log(
 				`[EVENT_TRIGGERED] eventType=${ctx.eventType} channelId=${ctx.channelId} success=${ctx.success} duration=${ctx.duration}ms${ctx.error ? ` error="${ctx.error}"` : ""}`
+			);
+			return next();
+		});
+
+		// event:create
+		hookManager.on<EventCreateContext>(HOOK_NAMES.EVENT_CREATE, async (ctx, next) => {
+			this.log(
+				`[EVENT_CREATE] eventType=${ctx.eventType} channelId=${ctx.channelId} filename=${ctx.filename} text="${this.truncate(ctx.text)}"`
+			);
+			return next();
+		});
+
+		// event:delete
+		hookManager.on<EventDeleteContext>(HOOK_NAMES.EVENT_DELETE, async (ctx, next) => {
+			this.log(
+				`[EVENT_DELETE] filename=${ctx.filename} channelId=${ctx.channelId ?? "unknown"} eventType=${ctx.eventType ?? "unknown"}`
+			);
+			return next();
+		});
+
+		// event:load
+		hookManager.on<EventLoadContext>(HOOK_NAMES.EVENT_LOAD, async (ctx, next) => {
+			this.log(
+				`[EVENT_LOAD] eventType=${ctx.eventType} channelId=${ctx.channelId} filename=${ctx.filename} text="${this.truncate(ctx.text)}"`
+			);
+			return next();
+		});
+
+		// event:schedule
+		hookManager.on<EventScheduleContext>(HOOK_NAMES.EVENT_SCHEDULE, async (ctx, next) => {
+			this.log(
+				`[EVENT_SCHEDULE] eventType=${ctx.eventType} channelId=${ctx.channelId} filename=${ctx.filename} schedule="${ctx.schedule ?? "N/A"}"`
 			);
 			return next();
 		});

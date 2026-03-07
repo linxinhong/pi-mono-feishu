@@ -156,6 +156,17 @@ export class EventsWatcher {
 
 			this.knownFiles.add(filename);
 
+			// 触发 event:load hook（通知）
+			if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_LOAD)) {
+				this.hookManager.emit(HOOK_NAMES.EVENT_LOAD, {
+					eventType: event.type,
+					channelId: event.channelId,
+					text: event.text,
+					filename,
+					timestamp: new Date(),
+				});
+			}
+
 			switch (event.type) {
 				case "immediate":
 					this.handleImmediate(filename, event);
@@ -221,6 +232,19 @@ export class EventsWatcher {
 		}
 
 		const delay = atTime - now;
+
+		// 触发 event:schedule hook（通知）
+		if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_SCHEDULE)) {
+			this.hookManager.emit(HOOK_NAMES.EVENT_SCHEDULE, {
+				eventType: event.type,
+				channelId: event.channelId,
+				text: event.text,
+				filename,
+				schedule: `delay ${delay}ms (at ${event.at})`,
+				timestamp: new Date(),
+			});
+		}
+
 		const timer = setTimeout(() => {
 			this.timers.delete(filename);
 			this.execute(filename, event);
@@ -238,6 +262,18 @@ export class EventsWatcher {
 			});
 
 			this.crons.set(filename, cron);
+
+			// 触发 event:schedule hook（通知）
+			if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_SCHEDULE)) {
+				this.hookManager.emit(HOOK_NAMES.EVENT_SCHEDULE, {
+					eventType: event.type,
+					channelId: event.channelId,
+					text: event.text,
+					filename,
+					schedule: `${event.schedule} (${event.timezone})`,
+					timestamp: new Date(),
+				});
+			}
 		} catch {
 			this.deleteFile(filename);
 		}
@@ -332,6 +368,17 @@ export class EventsWatcher {
 			// 写入文件
 			writeFileSync(filePath, JSON.stringify(event, null, 2), "utf-8");
 
+			// 触发 event:create hook（通知）
+			if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_CREATE)) {
+				this.hookManager.emit(HOOK_NAMES.EVENT_CREATE, {
+					eventType: event.type,
+					channelId: event.channelId,
+					text: event.text,
+					filename,
+					timestamp: new Date(),
+				});
+			}
+
 			return { success: true, filename };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -389,8 +436,31 @@ export class EventsWatcher {
 				return { success: false, error: `Event "${name}" not found` };
 			}
 
+			// 尝试读取事件信息用于 hook context
+			let eventInfo: { channelId?: string; eventType?: "immediate" | "one-shot" | "periodic" } = {};
+			try {
+				const content = require("fs").readFileSync(filePath, "utf-8");
+				const parsed = JSON.parse(content);
+				eventInfo = {
+					channelId: parsed.channelId,
+					eventType: parsed.type,
+				};
+			} catch {
+				// 忽略解析错误
+			}
+
 			unlinkSync(filePath);
 			this.knownFiles.delete(filename);
+
+			// 触发 event:delete hook（通知）
+			if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_DELETE)) {
+				this.hookManager.emit(HOOK_NAMES.EVENT_DELETE, {
+					filename,
+					channelId: eventInfo.channelId,
+					eventType: eventInfo.eventType,
+					timestamp: new Date(),
+				});
+			}
 
 			return { success: true };
 		} catch (error) {

@@ -136,6 +136,10 @@ export const HOOK_NAMES = {
 	// Events 事件调度
 	EVENT_TRIGGER: "event:trigger",
 	EVENT_TRIGGERED: "event:triggered",
+	EVENT_CREATE: "event:create",
+	EVENT_DELETE: "event:delete",
+	EVENT_LOAD: "event:load",
+	EVENT_SCHEDULE: "event:schedule",
 
 	// Tools 调用（通用）
 	TOOL_CALL: "tool:call",
@@ -232,6 +236,50 @@ export interface EventTriggeredContext extends EventTriggerContext {
 	success: boolean;
 	error?: string;
 	duration: number;
+}
+
+/**
+ * Events 事件创建上下文
+ */
+export interface EventCreateContext {
+	eventType: "immediate" | "one-shot" | "periodic";
+	channelId: string;
+	text: string;
+	filename: string;
+	timestamp: Date;
+}
+
+/**
+ * Events 事件删除上下文
+ */
+export interface EventDeleteContext {
+	filename: string;
+	channelId?: string;
+	eventType?: "immediate" | "one-shot" | "periodic";
+	timestamp: Date;
+}
+
+/**
+ * Events 事件加载上下文（启动扫描时）
+ */
+export interface EventLoadContext {
+	eventType: "immediate" | "one-shot" | "periodic";
+	channelId: string;
+	text: string;
+	filename: string;
+	timestamp: Date;
+}
+
+/**
+ * Events 事件调度上下文（加入定时器时）
+ */
+export interface EventScheduleContext {
+	eventType: "immediate" | "one-shot" | "periodic";
+	channelId: string;
+	text: string;
+	filename: string;
+	schedule?: string;
+	timestamp: Date;
 }
 
 /**
@@ -338,6 +386,10 @@ export interface HookContextMap {
 	[HOOK_NAMES.SESSION_DESTROY]: SessionHookContext;
 	[HOOK_NAMES.EVENT_TRIGGER]: EventTriggerContext;
 	[HOOK_NAMES.EVENT_TRIGGERED]: EventTriggeredContext;
+	[HOOK_NAMES.EVENT_CREATE]: EventCreateContext;
+	[HOOK_NAMES.EVENT_DELETE]: EventDeleteContext;
+	[HOOK_NAMES.EVENT_LOAD]: EventLoadContext;
+	[HOOK_NAMES.EVENT_SCHEDULE]: EventScheduleContext;
 	[HOOK_NAMES.TOOL_CALL]: ToolCallContext;
 	[HOOK_NAMES.TOOL_CALLED]: ToolCalledContext;
 	[HOOK_NAMES.SYSTEM_PROMPT_BUILD]: SystemPromptBuildContext;
