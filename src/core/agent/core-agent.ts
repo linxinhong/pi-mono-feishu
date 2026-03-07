@@ -1,0 +1,497 @@
+/**
+ * Core Agent
+ *
+ * 核心 Agent 类 - 平台无关的 AI 对话代理
+ */
+
+import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
+import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
+import {
+	AgentSession,
+	AuthStorage,
+	convertToLlm,
+	createExtensionRuntime,
+	ModelRegistry,
+	SessionManager,
+	type ResourceLoader,
+} from "@mariozechner/pi-coding-agent";
+import { readFileSync } from "fs";
+import { mkdir } from "fs/promises";
+import { join } from "path";
+import type { AgentContext } from "./context.js";
+import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-builder.js";
+import type { ModelManager } from "../model/manager.js";
+import type { PlatformContext } from "../platform/context.js";
+import type { UniversalMessage } from "../platform/message.js";
+import * as log from "../../utils/log.js";
+import type { Executor } from "../sandbox/index.js";
+import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Agent 配置
+ */
+export interface AgentConfig {
+	/** 模型管理器 */
+	modelManager: ModelManager;
+	/** 沙箱执行器 */
+	executor: Executor;
+	/** 工作目录 */
+	workspaceDir: string;
+	/** 事件总线 */
+	eventBus?: any;
+}
+
+/**
+ * Agent 状态
+ */
+interface AgentState {
+	agent: Agent | null;
+	session: AgentSession | null;
+	sessionManager: SessionManager | null;
+	modelRegistry: ModelRegistry | null;
+	memoryStore: MemoryStore | null;
+}
+
+/**
+ * Agent 运行状态
+ */
+interface AgentRunState {
+	totalUsage: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+		cost: {
+			input: number;
+			output: number;
+			cacheRead: number;
+			cacheWrite: number;
+			total: number;
+		};
+	};
+	stopReason: string;
+	errorMessage?: string;
+}
+
+// ============================================================================
+// Global State
+// ============================================================================
+
+const channelStates = new Map<string, AgentState>();
+
+// ============================================================================
+// Model Registry
+// ============================================================================
+
+let globalModelRegistry: ModelRegistry | null = null;
+let globalAuthStorage: AuthStorage | null = null;
+
+function getModelRegistry(): ModelRegistry {
+	if (!globalModelRegistry) {
+		globalAuthStorage = AuthStorage.create();
+		const modelsJsonPath = join(process.env.HOME || "", ".pi", "agent", "models.json");
+		globalModelRegistry = new ModelRegistry(globalAuthStorage, modelsJsonPath);
+	}
+	return globalModelRegistry;
+}
+
+async function getApiKeyForModel(model: Model<Api>): Promise<string> {
+	const provider = model.provider;
+
+	// 尝试从 auth storage 获取
+	if (globalAuthStorage) {
+		const key = await globalAuthStorage.getApiKey(provider);
+		if (key) return key;
+	}
+
+	throw new Error(`No API key found for ${provider}. Use /login or set environment variable.`);
+}
+
+// ============================================================================
+// Core Agent Class
+// ============================================================================
+
+/**
+ * 核心 Agent 类
+ *
+ * 平台无关的 AI 对话代理，负责：
+ * - 对话状态管理
+ * - 模型调用
+ * - 工具执行
+ * - 模型切换
+ */
+export class CoreAgent {
+	private config: AgentConfig;
+	private currentModel: Model<Api> | null = null;
+
+	constructor(config: AgentConfig) {
+		this.config = config;
+	}
+
+	/**
+	 * 处理消息（轻量平台感知）
+	 */
+	async processMessage(
+		message: UniversalMessage,
+		platformContext: PlatformContext,
+		additionalContext: Partial<AgentContext>,
+	): Promise<string> {
+		const chatId = message.chat.id;
+		const channelDir = join(this.config.workspaceDir, chatId);
+
+		// 确保目录存在
+		await mkdir(channelDir, { recursive: true });
+
+		// 检查模型切换命令
+		const { handleModelSwitchCommand } = await import("./model-switcher.js");
+		const switchResult = handleModelSwitchCommand(
+			message.content,
+			this.config.modelManager,
+			chatId,
+			channelDir,
+		);
+		if (switchResult.response) {
+			return switchResult.response;
+		}
+
+		// 加载频道模型配置
+		const modelConfigPath = join(channelDir, "model-config.json");
+		this.config.modelManager.loadChannelModels(modelConfigPath);
+
+		// 获取或创建 Agent 状态
+		let state = channelStates.get(chatId);
+		if (!state) {
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null };
+			channelStates.set(chatId, state);
+		}
+
+		// 初始化 Agent
+		if (!state.agent) {
+			await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
+		}
+
+		// 更新系统提示
+		await this.updateSystemPrompt(state, chatId, channelDir, platformContext, additionalContext);
+
+		// 准备用户消息
+		const userMessage = this.formatUserMessage(message, additionalContext);
+
+		// 处理图片附件
+		const imageAttachments = this.processImageAttachments(message);
+
+		// 创建 session
+		const systemPrompt = buildSystemPrompt(
+			{
+				platform: platformContext,
+				chatId,
+				user: {
+					id: message.sender.id,
+					userName: message.sender.name,
+					displayName: message.sender.displayName || message.sender.name,
+				},
+				workspaceDir: this.config.workspaceDir,
+				channelDir,
+				channels: additionalContext.channels || [],
+				users: additionalContext.users || [],
+				rawText: message.content,
+				text: message.content,
+				attachments: [],
+				timestamp: message.timestamp.toISOString(),
+			},
+			[],
+			"",
+		);
+		const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
+		const session = new AgentSession({
+			agent: state.agent!,
+			sessionManager: state.sessionManager!,
+			settingsManager: null as any,
+			cwd: process.cwd(),
+			modelRegistry: state.modelRegistry!,
+			resourceLoader,
+			baseToolsOverride: {},
+		});
+
+		// 运行状态
+		const runState: AgentRunState = {
+			totalUsage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			errorMessage: undefined,
+		};
+
+		// 订阅事件并响应
+		let finalResponse = "";
+		const responsePromise = new Promise<string>((resolve) => {
+			session.subscribe(async (agentEvent) => {
+				if (agentEvent.type === "tool_execution_start") {
+					const args = agentEvent.args as { label?: string };
+					const label = args.label || agentEvent.toolName;
+					await platformContext.sendText(chatId, `_ -> ${label}_`);
+				} else if (agentEvent.type === "tool_execution_end") {
+					const statusIcon = agentEvent.isError ? "X" : "OK";
+					await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
+				} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
+					const assistantMsg = agentEvent.message as any;
+					if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
+					if (assistantMsg.errorMessage) runState.errorMessage = assistantMsg.errorMessage;
+
+					const content = agentEvent.message.content;
+					const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
+					finalResponse = textParts.join("\n");
+				}
+			});
+		});
+
+		// 执行
+		await session.prompt(
+			userMessage,
+			imageAttachments.length > 0 ? { images: imageAttachments } : undefined,
+		);
+
+		await responsePromise;
+		return finalResponse || "_No response_";
+	}
+
+	/**
+	 * 初始化 Agent
+	 */
+	private async initializeAgent(
+		state: AgentState,
+		chatId: string,
+		channelDir: string,
+		message: UniversalMessage,
+		platformContext: PlatformContext,
+		additionalContext: Partial<AgentContext>,
+	): Promise<void> {
+		const workspacePath = this.config.executor.getWorkspacePath(
+			join(channelDir, "..", ".."),
+		);
+		const model = await this.config.modelManager.getModelInstance(chatId);
+
+		// 创建或获取 MemoryStore
+		if (!state.memoryStore) {
+			state.memoryStore = new MemoryStore(workspacePath);
+		}
+
+		// 创建工具
+		const { createBashTool } = await import("../tools/bash.js");
+		const { createReadTool } = await import("../tools/read.js");
+		const { createWriteTool } = await import("../tools/write.js");
+		const { createEditTool } = await import("../tools/edit.js");
+
+		const tools = [
+			createBashTool(this.config.executor),
+			createReadTool(this.config.executor),
+			createWriteTool(this.config.executor),
+			createEditTool(this.config.executor),
+			// 添加 memory 工具
+			...getAllMemoryTools(state.memoryStore, workspacePath),
+		];
+
+		// 初始化系统提示
+		const skills = loadSkills(channelDir, workspacePath);
+		const memoryContent = loadMemoryContent(channelDir, workspacePath);
+		const context: AgentContext = {
+			platform: platformContext,
+			chatId,
+			user: {
+				id: message.sender.id,
+				userName: message.sender.name,
+				displayName: message.sender.displayName || message.sender.name,
+			},
+			workspaceDir: workspacePath,
+			channelDir,
+			channels: additionalContext.channels || [],
+			users: additionalContext.users || [],
+			rawText: message.content,
+			text: message.content,
+			attachments: [],
+			timestamp: message.timestamp.toISOString(),
+		};
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
+
+		// 创建 Agent
+		state.agent = new Agent({
+			initialState: {
+				systemPrompt,
+				model,
+				thinkingLevel: "off",
+				tools,
+			},
+			convertToLlm,
+			getApiKey: async () => getApiKeyForModel(model),
+		});
+
+		// 创建 SessionManager
+		const contextFile = join(channelDir, "context.jsonl");
+		state.sessionManager = SessionManager.open(contextFile, channelDir);
+
+		// 创建 ModelRegistry
+		state.modelRegistry = getModelRegistry();
+
+		// 加载历史消息
+		const loadedSession = state.sessionManager.buildSessionContext();
+		if (loadedSession.messages.length > 0) {
+			state.agent.replaceMessages(loadedSession.messages);
+			log.logInfo(`[Agent] Loaded ${loadedSession.messages.length} messages from context`);
+		}
+
+		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id}`);
+	}
+
+	/**
+	 * 更新系统提示
+	 */
+	private async updateSystemPrompt(
+		state: AgentState,
+		chatId: string,
+		channelDir: string,
+		platformContext: PlatformContext,
+		additionalContext: Partial<AgentContext>,
+	): Promise<void> {
+		const workspacePath = this.config.executor.getWorkspacePath(
+			join(channelDir, "..", ".."),
+		);
+		const skills = loadSkills(channelDir, workspacePath);
+		const memoryContent = loadMemoryContent(channelDir, workspacePath);
+
+		const context: AgentContext = {
+			platform: platformContext,
+			chatId,
+			user: additionalContext.user || { id: "", userName: "", displayName: "" },
+			workspaceDir: workspacePath,
+			channelDir,
+			channels: additionalContext.channels || [],
+			users: additionalContext.users || [],
+			rawText: "",
+			text: "",
+			attachments: [],
+			timestamp: "",
+		};
+
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
+		state.agent!.setSystemPrompt(systemPrompt);
+	}
+
+	/**
+	 * 格式化用户消息
+	 */
+	private formatUserMessage(message: UniversalMessage, additionalContext: Partial<AgentContext>): string {
+		const now = new Date();
+		const pad = (n: number) => n.toString().padStart(2, "0");
+		const offset = -now.getTimezoneOffset();
+		const offsetSign = offset >= 0 ? "+" : "-";
+		const offsetHours = pad(Math.floor(Math.abs(offset) / 60));
+		const offsetMins = pad(Math.abs(offset) % 60);
+		const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}${offsetSign}${offsetHours}:${offsetMins}`;
+
+		const userName = additionalContext.user?.displayName || additionalContext.user?.userName || message.sender.name || "unknown";
+		let userMessage = `[${timestamp}] [${userName}]: ${message.content}`;
+
+		// 处理非图片附件
+		const nonImageAttachments = (message.attachments || []).filter((a) => a.type !== "image");
+		if (nonImageAttachments.length > 0) {
+			const paths = nonImageAttachments.map((a) => a.localPath).join("\n");
+			userMessage += `\n\n<attachments>\n${paths}\n</attachments>`;
+		}
+
+		return userMessage;
+	}
+
+	/**
+	 * 处理图片附件
+	 */
+	private processImageAttachments(message: UniversalMessage): ImageContent[] {
+		const IMAGE_MIME_TYPES: Record<string, string> = {
+			jpg: "image/jpeg",
+			jpeg: "image/jpeg",
+			png: "image/png",
+			gif: "image/gif",
+			webp: "image/webp",
+		};
+
+		const imageAttachments: ImageContent[] = [];
+
+		for (const attachment of message.attachments || []) {
+			if (attachment.type !== "image") continue;
+
+			const ext = attachment.name.toLowerCase().split(".").pop() || "";
+			const mimeType = IMAGE_MIME_TYPES[ext];
+
+			if (mimeType) {
+				try {
+					const data = readFileSync(attachment.localPath).toString("base64");
+					imageAttachments.push({
+						type: "image",
+						mimeType,
+						data,
+					});
+				} catch (error) {
+					log.logWarning(`[Agent] Failed to read image: ${attachment.localPath}`);
+				}
+			}
+		}
+
+		return imageAttachments;
+	}
+
+	/**
+	 * 创建资源加载器
+	 */
+	private createResourceLoader(agent: Agent, systemPrompt: string): ResourceLoader {
+		return {
+			getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+			getSkills: () => ({ skills: [], diagnostics: [] }),
+			getPrompts: () => ({ prompts: [], diagnostics: [] }),
+			getThemes: () => ({ themes: [], diagnostics: [] }),
+			getAgentsFiles: () => ({ agentsFiles: [] }),
+			getSystemPrompt: () => systemPrompt,
+			getAppendSystemPrompt: () => [],
+			getPathMetadata: () => new Map(),
+			extendResources: () => {},
+			reload: async () => {},
+		};
+	}
+
+	/**
+	 * 切换模型
+	 */
+	switchModel(modelId: string): boolean {
+		return this.config.modelManager.switchModel(modelId);
+	}
+
+	/**
+	 * 切换频道模型
+	 */
+	switchChannelModel(channelId: string, modelId: string): boolean {
+		return this.config.modelManager.switchChannelModel(channelId, modelId);
+	}
+
+	/**
+	 * 获取当前模型
+	 */
+	async getCurrentModel(channelId?: string): Promise<Model<Api>> {
+		return this.config.modelManager.getModelInstance(channelId);
+	}
+}
+
+// ============================================================================
+// Factory
+// ============================================================================
+
+/**
+ * 创建 CoreAgent 实例
+ */
+export function createCoreAgent(config: AgentConfig): CoreAgent {
+	return new CoreAgent(config);
+}

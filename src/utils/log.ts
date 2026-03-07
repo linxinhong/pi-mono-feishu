@@ -1,0 +1,110 @@
+/**
+ * Log - 日志工具
+ */
+
+interface LogContext {
+	channelId: string;
+	userName?: string;
+	channelName?: string;
+}
+
+interface UsageSummary {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	cost: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+		total: number;
+	};
+}
+
+const COLORS = {
+	reset: "\x1b[0m",
+	bright: "\x1b[1m",
+	dim: "\x1b[2m",
+	green: "\x1b[32m",
+	yellow: "\x1b[33m",
+	blue: "\x1b[34m",
+	magenta: "\x1b[35m",
+	cyan: "\x1b[36m",
+	red: "\x1b[31m",
+};
+
+function timestamp(): string {
+	return new Date().toISOString().replace("T", " ").substring(0, 19);
+}
+
+export function logInfo(message: string, ...args: unknown[]): void {
+	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.green}INFO${COLORS.reset} ${message}`, ...args);
+}
+
+export function logWarning(message: string, ...args: unknown[]): void {
+	console.warn(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.yellow}WARN${COLORS.reset} ${message}`, ...args);
+}
+
+export function logError(message: string, ...args: unknown[]): void {
+	console.error(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.red}ERROR${COLORS.reset} ${message}`, ...args);
+}
+
+export function logToolStart(ctx: LogContext, toolName: string, label: string, args: Record<string, unknown>): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	console.log(
+		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.magenta}TOOL${COLORS.reset} ${toolName}: ${label}`,
+	);
+}
+
+export function logToolSuccess(ctx: LogContext, toolName: string, durationMs: number, result: string): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const duration = (durationMs / 1000).toFixed(1);
+	const truncated = result.length > 200 ? result.substring(0, 200) + "..." : result;
+	console.log(
+		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.green}OK${COLORS.reset} ${toolName} (${duration}s): ${truncated}`,
+	);
+}
+
+export function logToolError(ctx: LogContext, toolName: string, durationMs: number, error: string): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const duration = (durationMs / 1000).toFixed(1);
+	console.error(
+		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.red}ERR${COLORS.reset} ${toolName} (${duration}s): ${error}`,
+	);
+}
+
+export function logResponseStart(ctx: LogContext): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.blue}RESP${COLORS.reset} Starting response...`);
+}
+
+export function logResponse(ctx: LogContext, text: string): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const truncated = text.length > 100 ? text.substring(0, 100) + "..." : text;
+	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.blue}RESP${COLORS.reset} ${truncated}`);
+}
+
+export function logThinking(ctx: LogContext, thinking: string): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const truncated = thinking.length > 100 ? thinking.substring(0, 100) + "..." : thinking;
+	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.magenta}THINK${COLORS.reset} ${truncated}`);
+}
+
+export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTokens: number, contextWindow: number): string {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const contextPercent = ((contextTokens / contextWindow) * 100).toFixed(1);
+	const costStr = usage.cost.total > 0 ? ` $${usage.cost.total.toFixed(4)}` : "";
+
+	const summary = `📊 Tokens: ${usage.input.toLocaleString()} in / ${usage.output.toLocaleString()} out${costStr} | Context: ${contextPercent}%`;
+
+	console.log(
+		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.green}USAGE${COLORS.reset} ${summary}`,
+	);
+
+	return summary;
+}
+
+export function logConnected(): void {
+	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.green}✓${COLORS.reset} Connected to Feishu`);
+}

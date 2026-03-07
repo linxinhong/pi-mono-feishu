@@ -1,0 +1,56 @@
+{
+  "default": "qwen",
+  "models": {
+    "qwen": {
+      "id": "qwen",
+      "name": "通义千问",
+      "provider": "dashscope",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "apiKeyEnv": "DASHSCOPE_API_KEY",
+      "model": "qwen-plus",
+      "capabilities": {
+        "vision": true,
+        "tools": true,
+        "streaming": true
+      },
+      "defaultParams": {
+        "temperature": 0.7,
+        "maxTokens": 4000
+      }
+    },
+    "glm": {
+      "id": "glm",
+      "name": "智谱 GLM",
+      "provider": "zhipu",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKeyEnv": "ZHIPU_API_KEY",
+      "model": "glm-4",
+      "capabilities": {
+        "vision": true,
+        "tools": true,
+        "streaming": true
+      },
+      "defaultParams": {
+        "temperature": 0.7,
+        "maxTokens": 4000
+      }
+    },
+    "kimi": {
+      "id": "kimi",
+      "name": "Moonshot Kimi",
+      "provider": "moonshot",
+      "baseUrl": "https://api.moonshot.cn/v1",
+      "apiKeyEnv": "MOONSHOT_API_KEY",
+      "model": "moonshot-v1-8k",
+      "capabilities": {
+        "vision": false,
+        "tools": true,
+        "streaming": true
+      },
+      "defaultParams": {
+        "temperature": 0.7,
+        "maxTokens": 4000
+      }
+    }
+  }
+}
