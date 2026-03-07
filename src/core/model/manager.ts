@@ -64,6 +64,7 @@ export class ModelManager {
 	private modelRegistry: ModelRegistry;
 	private authStorage: AuthStorage;
 	private configManager?: ConfigManager;
+	private onModelChange?: (channelId: string, modelId: string) => void;
 
 	constructor(configPath?: string, defaultModelId?: string) {
 		const path = configPath || join(PROJECT_ROOT, "models.json");
@@ -234,6 +235,12 @@ export class ModelManager {
 
 		this.perChannelModels.set(channelId, config.id);
 		log.logInfo(`[ModelManager] Channel ${channelId} switched to ${config.id}`);
+
+		// 通知销毁 Agent 状态
+		if (this.onModelChange) {
+			this.onModelChange(channelId, config.id);
+		}
+
 		return true;
 	}
 
@@ -453,6 +460,13 @@ export class ModelManager {
 		}
 		// 回退：使用文件名
 		return configPath;
+	}
+
+	/**
+	 * 设置模型变更回调
+	 */
+	setOnModelChange(callback: (channelId: string, modelId: string) => void): void {
+		this.onModelChange = callback;
 	}
 
 	/**

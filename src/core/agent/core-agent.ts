@@ -774,6 +774,15 @@ export class CoreAgent {
 	async getCurrentModel(channelId?: string): Promise<Model<Api>> {
 		return this.config.modelManager.getModelInstance(channelId, this.config.adapterDefaultModel);
 	}
+
+	/**
+	 * 销毁频道 Agent 状态
+	 * 当模型切换时调用，下次消息处理时会重新初始化并使用新模型
+	 */
+	destroyChannelState(channelId: string): void {
+		channelStates.delete(channelId);
+		log.logInfo(`[Agent] Destroyed state for channel ${channelId}`);
+	}
 }
 
 // ============================================================================

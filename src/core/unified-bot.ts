@@ -92,6 +92,11 @@ export class UnifiedBot {
 			hookManager: getHookManager(),
 		});
 
+		// 设置模型变更回调：当模型切换时销毁 Agent 状态
+		this.modelManager.setOnModelChange((channelId) => {
+			this.coreAgent.destroyChannelState(channelId);
+		});
+
 		// 订阅适配器消息
 		this.adapter.onMessage(async (message) => {
 			await this.handleMessage(message);
