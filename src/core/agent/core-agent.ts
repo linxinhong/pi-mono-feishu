@@ -4,7 +4,7 @@
  * 核心 Agent 类 - 平台无关的 AI 对话代理
  */
 
-import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentEvent, type AgentTool } from "@mariozechner/pi-agent-core";
 import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
 import {
 	AgentSession,
@@ -60,6 +60,7 @@ interface AgentState {
 	sessionManager: SessionManager | null;
 	modelRegistry: ModelRegistry | null;
 	memoryStore: MemoryStore | null;
+	tools: AgentTool<any>[];
 }
 
 /**
@@ -158,7 +159,7 @@ export class CoreAgent {
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, tools: [] };
 			channelStates.set(chatId, state);
 		}
 
@@ -218,6 +219,12 @@ export class CoreAgent {
 			shellPath: process.env.SHELL || "/bin/bash",
 		});
 
+		// 将工具数组转换为 Record 格式
+		const toolsRecord: Record<string, AgentTool> = {};
+		for (const tool of state.tools) {
+			toolsRecord[tool.name] = tool;
+		}
+
 		const session = new AgentSession({
 			agent: state.agent!,
 			sessionManager: state.sessionManager!,
@@ -225,7 +232,7 @@ export class CoreAgent {
 			cwd: process.cwd(),
 			modelRegistry: state.modelRegistry!,
 			resourceLoader,
-			baseToolsOverride: {},
+			baseToolsOverride: toolsRecord,
 		});
 
 		// 运行状态
@@ -361,6 +368,9 @@ export class CoreAgent {
 
 		const toolNames = tools.map((t: any) => t.name).join(", ");
 		log.logInfo(`[Agent] Created ${tools.length} tools for channel ${chatId}: ${toolNames}`);
+
+		// 保存工具到 state，供 AgentSession 使用
+		state.tools = tools;
 
 		// 初始化系统提示
 		const skills = loadSkills(channelDir, workspacePath);
