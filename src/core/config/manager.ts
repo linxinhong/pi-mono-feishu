@@ -461,6 +461,11 @@ export class ConfigManager {
 				return;
 			}
 
+			// 确保配置文件存在（配置文件不存在是正常情况，静默忽略）
+			if (!existsSync(configPath)) {
+				return;
+			}
+
 			const watcher = watch(configPath, async (eventType) => {
 				if (eventType === "change") {
 					log.logInfo(`[ConfigManager] Channel ${channelId} config file changed, reloading...`);
