@@ -144,7 +144,7 @@ function handleSwitchAction(
 	}
 
 	// 保存到频道配置
-	const configPath = join(channelDir, "model-config.json");
+	const configPath = join(channelDir, "channel-config.json");
 	modelManager.saveChannelModel(channelId, modelId.toLowerCase(), configPath);
 
 	return {

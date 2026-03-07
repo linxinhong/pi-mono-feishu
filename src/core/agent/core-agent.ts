@@ -143,7 +143,7 @@ export class CoreAgent {
 		await mkdir(channelDir, { recursive: true });
 
 		// 加载频道模型配置
-		const modelConfigPath = join(channelDir, "model-config.json");
+		const modelConfigPath = join(channelDir, "channel-config.json");
 		this.config.modelManager.loadChannelModels(modelConfigPath);
 
 		// 获取或创建 Agent 状态

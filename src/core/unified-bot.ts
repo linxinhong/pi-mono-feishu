@@ -150,7 +150,13 @@ export class UnifiedBot {
 
 		// 发送响应
 		if (response) {
-			await platformContext.sendText(message.chat.id, response);
+			// 使用 finishStatus 更新状态卡片为最终响应
+			const feishuContext = platformContext as any;
+			if (feishuContext.finishStatus) {
+				await feishuContext.finishStatus(response);
+			} else {
+				await platformContext.sendText(message.chat.id, response);
+			}
 
 			// 记录回复
 			const duration = Date.now() - startTime;

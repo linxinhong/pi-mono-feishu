@@ -115,15 +115,20 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param finalMessage 最终消息，如果不提供则删除状态消息
 	 */
 	async finishStatus(finalMessage?: string): Promise<void> {
-		if (this.statusMessageId) {
-			if (finalMessage) {
+		if (finalMessage) {
+			if (this.statusMessageId) {
+				// 有状态消息，更新它
 				await this.config.updateMessage(this.statusMessageId, finalMessage);
 			} else {
-				await this.config.deleteMessage(this.statusMessageId);
+				// 没有状态消息（没有工具调用），创建新消息
+				this.statusMessageId = await this.config.postMessage(this.config.chatId, finalMessage);
 			}
-			this.statusMessageId = null;
-			this.toolHistory = [];
+		} else if (this.statusMessageId) {
+			// 没有最终消息，删除状态消息
+			await this.config.deleteMessage(this.statusMessageId);
 		}
+		this.statusMessageId = null;
+		this.toolHistory = [];
 	}
 
 	/**
