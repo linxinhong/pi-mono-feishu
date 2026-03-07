@@ -10,5 +10,4 @@
 
 export * from "./context.js";
 export * from "./core-agent.js";
-export * from "./model-switcher.js";
 export * from "./prompt-builder.js";

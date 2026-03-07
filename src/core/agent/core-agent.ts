@@ -142,18 +142,6 @@ export class CoreAgent {
 		// 确保目录存在
 		await mkdir(channelDir, { recursive: true });
 
-		// 检查模型切换命令
-		const { handleModelSwitchCommand } = await import("./model-switcher.js");
-		const switchResult = handleModelSwitchCommand(
-			message.content,
-			this.config.modelManager,
-			chatId,
-			channelDir,
-		);
-		if (switchResult.response) {
-			return switchResult.response;
-		}
-
 		// 加载频道模型配置
 		const modelConfigPath = join(channelDir, "model-config.json");
 		this.config.modelManager.loadChannelModels(modelConfigPath);
@@ -390,7 +378,11 @@ export class CoreAgent {
 			createReadTool(this.config.executor),
 			createWriteTool(this.config.executor),
 			createEditTool(this.config.executor),
-			createModelsTool(this.config.modelManager),
+			createModelsTool({
+				modelManager: this.config.modelManager,
+				channelId: chatId,
+				channelDir: channelDir,
+			}),
 			createGlobTool(this.config.executor),
 			createGrepTool(this.config.executor),
 			createSpawnTool({
