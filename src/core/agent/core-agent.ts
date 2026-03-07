@@ -8,7 +8,6 @@ import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
 import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
 import {
 	AgentSession,
-	AuthStorage,
 	convertToLlm,
 	createExtensionRuntime,
 	ModelRegistry,
@@ -23,7 +22,6 @@ import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-build
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
-import { PROJECT_ROOT } from "../../utils/config.js";
 import * as log from "../../utils/logger/index.js";
 import type { Executor } from "../sandbox/index.js";
 import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
@@ -91,31 +89,18 @@ interface AgentRunState {
 const channelStates = new Map<string, AgentState>();
 
 // ============================================================================
-// Model Registry
+// API Key Helper
 // ============================================================================
 
-let globalModelRegistry: ModelRegistry | null = null;
-let globalAuthStorage: AuthStorage | null = null;
+async function getApiKeyForModel(
+	model: Model<Api>,
+	modelRegistry: ModelRegistry,
+): Promise<string> {
+	// 尝试从 ModelRegistry 获取
+	const key = await modelRegistry.getApiKey(model);
+	if (key) return key;
 
-function getModelRegistry(): ModelRegistry {
-	if (!globalModelRegistry) {
-		globalAuthStorage = AuthStorage.create();
-		const modelsJsonPath = join(PROJECT_ROOT, "models.json");
-		globalModelRegistry = new ModelRegistry(globalAuthStorage, modelsJsonPath);
-	}
-	return globalModelRegistry;
-}
-
-async function getApiKeyForModel(model: Model<Api>): Promise<string> {
-	const provider = model.provider;
-
-	// 尝试从 auth storage 获取
-	if (globalAuthStorage) {
-		const key = await globalAuthStorage.getApiKey(provider);
-		if (key) return key;
-	}
-
-	throw new Error(`No API key found for ${provider}. Use /login or set environment variable.`);
+	throw new Error(`No API key found for ${model.provider}. Use /login or set environment variable.`);
 }
 
 // ============================================================================
@@ -386,6 +371,13 @@ export class CoreAgent {
 		};
 		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
 
+		// 创建 ModelRegistry（必须在 Agent 之前，因为 getApiKey 需要用到）
+		state.modelRegistry = this.config.modelManager.getRegistry();
+
+		// 创建 SessionManager
+		const contextFile = join(channelDir, "context.jsonl");
+		state.sessionManager = SessionManager.open(contextFile, channelDir);
+
 		// 创建 Agent
 		state.agent = new Agent({
 			initialState: {
@@ -395,15 +387,8 @@ export class CoreAgent {
 				tools,
 			},
 			convertToLlm,
-			getApiKey: async () => getApiKeyForModel(model),
+			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 		});
-
-		// 创建 SessionManager
-		const contextFile = join(channelDir, "context.jsonl");
-		state.sessionManager = SessionManager.open(contextFile, channelDir);
-
-		// 创建 ModelRegistry
-		state.modelRegistry = getModelRegistry();
 
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
