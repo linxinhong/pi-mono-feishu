@@ -178,10 +178,31 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	async updateMessage(messageId: string, response: UniversalResponse): Promise<void> {
-		const content = typeof response.content === "string" ? response.content : JSON.stringify(response.content);
+		let content: string;
+
+		// 检查是否已经是飞书卡片格式
+		if (typeof response.content === "string") {
+			try {
+				const parsed = JSON.parse(response.content);
+				if (parsed.schema === "2.0" && parsed.body) {
+					// 已经是飞书卡片格式，直接使用
+					content = response.content;
+				} else {
+					// 普通文本，包装成卡片
+					content = this.buildTextCard(response.content);
+				}
+			} catch {
+				// JSON 解析失败，当作普通文本处理
+				content = this.buildTextCard(response.content);
+			}
+		} else {
+			// 对象格式，序列化后包装成卡片
+			content = this.buildTextCard(JSON.stringify(response.content));
+		}
+
 		await this.client.im.message.patch({
 			path: { message_id: messageId },
-			data: { content: this.buildTextCard(content) },
+			data: { content },
 		} as any);
 	}
 
