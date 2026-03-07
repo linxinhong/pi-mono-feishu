@@ -100,6 +100,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	private channels = new Map<string, ChannelInfo>();
 	private queues = new Map<string, ChannelQueue>();
 	private messageHandlers: Array<(message: UniversalMessage) => void> = [];
+	private processedMessages = new Set<string>();
 
 	private runningChannels = new Map<string, { abort: () => void }>();
 	private startupTs: string | null = null;
@@ -526,6 +527,21 @@ export class FeishuAdapter implements PlatformAdapter {
 		if (this.startupTs && universalMessage.timestamp.getTime() < parseInt(this.startupTs)) {
 			this.logger.debug(`Skipping old message: ${universalMessage.content.substring(0, 30)}`);
 			return;
+		}
+
+		// 去重检查
+		if (this.processedMessages.has(universalMessage.id)) {
+			this.logger.debug(`Skipping duplicate message: ${universalMessage.id}`);
+			return;
+		}
+
+		// 记录已处理的消息 ID
+		this.processedMessages.add(universalMessage.id);
+
+		// 限制缓存大小，防止内存泄漏
+		if (this.processedMessages.size > 10000) {
+			const arr = Array.from(this.processedMessages);
+			this.processedMessages = new Set(arr.slice(-5000));
 		}
 
 		// 分发消息
