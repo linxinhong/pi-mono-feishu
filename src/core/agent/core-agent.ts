@@ -350,6 +350,9 @@ export class CoreAgent {
 		const { createWriteTool } = await import("../tools/write.js");
 		const { createEditTool } = await import("../tools/edit.js");
 		const { createModelsTool } = await import("../tools/models.js");
+		const { createGlobTool } = await import("../tools/glob.js");
+		const { createGrepTool } = await import("../tools/grep.js");
+		const { createSpawnTool } = await import("../tools/spawn.js");
 
 		const tools = [
 			createBashTool(this.config.executor),
@@ -357,6 +360,13 @@ export class CoreAgent {
 			createWriteTool(this.config.executor),
 			createEditTool(this.config.executor),
 			createModelsTool(this.config.modelManager),
+			createGlobTool(this.config.executor),
+			createGrepTool(this.config.executor),
+			createSpawnTool({
+				executor: this.config.executor,
+				modelManager: this.config.modelManager,
+				workspaceDir: workspacePath,
+			}),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, workspacePath),
 		].filter(Boolean);
