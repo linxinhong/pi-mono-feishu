@@ -83,7 +83,7 @@ export class FeishuOutbound {
 	/**
 	 * 发送卡片消息
 	 */
-	async sendCard(receiveId: string, content: string, rootId?: string): Promise<string> {
+	async sendCard(receiveId: string, content: string | CardContent, rootId?: string): Promise<string> {
 		return this.sendMessage({
 			receiveId,
 			msgType: "interactive",

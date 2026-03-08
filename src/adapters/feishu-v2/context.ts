@@ -6,6 +6,7 @@
 
 import type { PlatformContext } from "../../core/platform/context.js";
 import { buildStatusCard, autoBuildCard, buildProgressCard, buildTextCard } from "./cards.js";
+import type { CardContent } from "./types.js";
 
 // ============================================================================
 // Types
@@ -22,9 +23,9 @@ export interface FeishuContextConfig {
 	/** 适配器引用 */
 	adapter?: any;
 	/** 发送文本消息的函数 */
-	postMessage: (chatId: string, text: string) => Promise<string>;
+	postMessage: (chatId: string, text: string | CardContent) => Promise<string>;
 	/** 更新消息的函数 */
-	updateMessage: (messageId: string, text: string) => Promise<void>;
+	updateMessage: (messageId: string, text: string | CardContent) => Promise<void>;
 	/** 删除消息的函数 */
 	deleteMessage: (messageId: string) => Promise<void>;
 	/** 上传文件的函数 */
@@ -65,13 +66,13 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 如果还没有状态消息，先创建一个
 		if (!this.statusMessageId) {
-			const initialCard = JSON.stringify(buildProgressCard("🤔 处理中...", []));
+			const initialCard = buildProgressCard("🤔 处理中...", []);
 			this.statusMessageId = await this.config.postMessage(chatId, initialCard);
 		}
 
 		// 更新状态卡片
 		if (this.toolHistory.length > 0) {
-			const progressCard = JSON.stringify(buildProgressCard("🤔 处理中...", this.toolHistory));
+			const progressCard = buildProgressCard("🤔 处理中...", this.toolHistory);
 			await this.config.updateMessage(this.statusMessageId, progressCard);
 		}
 
@@ -122,14 +123,13 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (finalMessage) {
 			// 使用智能卡片构建器
 			const card = autoBuildCard(finalMessage);
-			const cardContent = JSON.stringify(card);
 
 			if (this.statusMessageId) {
 				// 有状态消息，更新它
-				await this.config.updateMessage(this.statusMessageId, cardContent);
+				await this.config.updateMessage(this.statusMessageId, card);
 			} else {
 				// 没有状态消息（没有工具调用），创建新消息
-				this.statusMessageId = await this.config.postMessage(this.config.chatId, cardContent);
+				this.statusMessageId = await this.config.postMessage(this.config.chatId, card);
 			}
 		} else if (this.statusMessageId) {
 			// 没有最终消息，删除状态消息
@@ -146,12 +146,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		switch (feature) {
 			case "buildCard": {
 				// 返回飞书卡片构建函数
-				const fn = (content: string) => JSON.stringify(buildTextCard(content));
+				const fn = (content: string) => buildTextCard(content);
 				return fn as T;
 			}
 			case "autoBuildCard": {
 				// 返回智能卡片构建函数
-				const fn = (content: string) => JSON.stringify(autoBuildCard(content));
+				const fn = (content: string) => autoBuildCard(content);
 				return fn as T;
 			}
 			case "adapter": {

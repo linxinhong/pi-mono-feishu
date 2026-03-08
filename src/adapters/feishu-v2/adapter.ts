@@ -290,8 +290,23 @@ export class FeishuAdapter implements PlatformAdapter {
 			client: this.client,
 			chatId,
 			adapter: this,
-			postMessage: async (chatId, text) => this.postMessage(chatId, text),
-			updateMessage: async (messageId, text) => this.updateMessage(messageId, { type: "text", content: text }),
+			postMessage: async (chatId, content: string | CardContent) => {
+				// content 可能是 string 或卡片对象
+				if (typeof content === "string") {
+					return this.postMessage(chatId, content);
+				} else {
+					return this.outbound.sendCard(chatId, content);
+				}
+			},
+			updateMessage: async (messageId, content: string | CardContent) => {
+				// content 可能是 string 或卡片对象
+				if (typeof content === "string") {
+					await this.updateMessage(messageId, { type: "text", content });
+				} else {
+					const cardContent = JSON.stringify(content);
+					await this.outbound.updateMessage(messageId, cardContent);
+				}
+			},
 			deleteMessage: async (messageId) => this.deleteMessage(messageId),
 			uploadFile: async (chatId, filePath, title) => this.uploadFileToChat(chatId, filePath, title),
 			uploadImage: async (imagePath) => this.uploadImage(imagePath),
@@ -376,7 +391,7 @@ export class FeishuAdapter implements PlatformAdapter {
 			});
 		}
 
-		const messageId = await this.outbound.sendCard(channel, JSON.stringify(buildTextCard(text)));
+		const messageId = await this.outbound.sendCard(channel, buildTextCard(text));
 
 		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_SENT)) {
 			await hookManager.emit(HOOK_NAMES.MESSAGE_SENT, {
