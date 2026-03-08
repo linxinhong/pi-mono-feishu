@@ -30,6 +30,8 @@ export interface FeishuV2BotConfig extends BotConfig {
 	useWebSocket?: boolean;
 	/** 默认模型 */
 	model?: string;
+	/** 是否隐藏思考过程（默认 false，即显示） */
+	hideThinking?: boolean;
 }
 
 // ============================================================================
@@ -80,6 +82,7 @@ export const feishuV2AdapterFactory: AdapterFactory = {
 			port: config.port,
 			logger: logger.child("adapter"),
 			model: config.model,
+			hideThinking: config.hideThinking,
 		} as FeishuAdapterConfig);
 
 		// 初始化适配器

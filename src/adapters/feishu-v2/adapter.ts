@@ -80,6 +80,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	private workingDir: string;
 	private logger: Logger;
 	private defaultModel: string | undefined;
+	private hideThinking: boolean;
 
 	// 出站功能
 	private outbound: FeishuOutbound;
@@ -104,6 +105,7 @@ export class FeishuAdapter implements PlatformAdapter {
 		this.workingDir = config.workingDir;
 		this.logger = config.logger || new PiLogger("feishu-v2:adapter");
 		this.defaultModel = config.model;
+		this.hideThinking = config.hideThinking ?? false;
 
 		// 初始化飞书客户端
 		this.client = new lark.Client({
@@ -313,6 +315,7 @@ export class FeishuAdapter implements PlatformAdapter {
 			sendImage: async (chatId, imageKey) => this.sendImageToChat(chatId, imageKey),
 			sendVoiceMessage: async (chatId, filePath) => this.sendVoiceToChat(chatId, filePath),
 			postInThread: async (chatId, parentMessageId, text) => this.postInThread(chatId, parentMessageId, text),
+			hideThinking: this.hideThinking,
 		});
 	}
 

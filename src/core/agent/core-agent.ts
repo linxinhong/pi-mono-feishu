@@ -358,6 +358,13 @@ export class CoreAgent {
 									duration: 0, // duration 需要从 start 事件计算，这里简化处理
 								});
 							}
+						} else if (agentEvent.type === "message_update") {
+							// 处理 thinking 事件
+							const message = agentEvent.message as any;
+							const thinkingContent = message.content?.find((c: any) => c.type === "thinking");
+							if (thinkingContent && (platformContext as any).updateThinking) {
+								await (platformContext as any).updateThinking(thinkingContent.thinking);
+							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 							const assistantMsg = agentEvent.message as any;
 							if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
@@ -369,6 +376,12 @@ export class CoreAgent {
 							const content = agentEvent.message.content;
 							const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
 							finalResponse = textParts.join("\n");
+
+							// 完成思考卡片
+							if ((platformContext as any).finishThinking) {
+								await (platformContext as any).finishThinking(finalResponse);
+							}
+
 							resolve(finalResponse);
 						}
 					} catch (error) {
@@ -557,12 +570,15 @@ export class CoreAgent {
 		const contextFile = join(channelDir, "context.jsonl");
 		state.sessionManager = SessionManager.open(contextFile, channelDir);
 
+		// 检查是否隐藏思考过程
+		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
+
 		// 创建 Agent
 		state.agent = new Agent({
 			initialState: {
 				systemPrompt,
 				model,
-				thinkingLevel: "off",
+				thinkingLevel: hideThinking ? "off" : "medium",
 				tools,
 			},
 			convertToLlm,

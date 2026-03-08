@@ -321,6 +321,8 @@ export interface FeishuAdapterConfig {
 	logger?: any;
 	/** 默认模型 */
 	model?: string;
+	/** 是否隐藏思考过程（默认 false，即显示） */
+	hideThinking?: boolean;
 }
 
 // ============================================================================

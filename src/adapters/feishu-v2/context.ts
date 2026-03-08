@@ -6,7 +6,7 @@
 
 import type { PlatformContext } from "../../core/platform/context.js";
 import type { PlatformTool } from "../../core/platform/tools/index.js";
-import { buildStatusCard, autoBuildCard, buildProgressCard, buildTextCard } from "./cards.js";
+import { buildStatusCard, autoBuildCard, buildProgressCard, buildTextCard, buildThinkingProgressCard } from "./cards.js";
 import type { CardContent } from "./types.js";
 import { FeishuToolsManager } from "./tools/index.js";
 import { createAllFeishuTools } from "./tools/agent-tools.js";
@@ -41,6 +41,8 @@ export interface FeishuContextConfig {
 	sendVoiceMessage: (chatId: string, filePath: string) => Promise<string>;
 	/** 在线程中回复的函数 */
 	postInThread: (chatId: string, parentMessageId: string, text: string) => Promise<string>;
+	/** 是否隐藏思考过程（默认 false，即显示） */
+	hideThinking?: boolean;
 }
 
 // ============================================================================
@@ -57,9 +59,14 @@ export class FeishuPlatformContext implements PlatformContext {
 	private toolHistory: string[] = []; // 工具执行历史
 	private toolsCache: PlatformTool[] | null = null; // 平台工具缓存
 	private toolsManager: FeishuToolsManager | null = null; // 工具管理器缓存
+	// 思考卡片相关
+	private thinkingMessageId: string | null = null; // 思考卡片的消息 ID
+	private currentThinking: string = ""; // 当前累积的思考内容
+	private hideThinking: boolean; // 是否隐藏思考过程
 
 	constructor(config: FeishuContextConfig) {
 		this.config = config;
+		this.hideThinking = config.hideThinking ?? false; // 默认显示思考过程
 	}
 
 	async sendText(chatId: string, text: string): Promise<string> {
@@ -142,6 +149,59 @@ export class FeishuPlatformContext implements PlatformContext {
 		}
 		this.statusMessageId = null;
 		this.toolHistory = [];
+	}
+
+	/**
+	 * 更新思考内容卡片
+	 * @param thinking 思考内容
+	 */
+	async updateThinking(thinking: string): Promise<void> {
+		if (this.hideThinking) return;
+
+		this.currentThinking = thinking;
+
+		const card = buildThinkingProgressCard(thinking);
+
+		if (this.thinkingMessageId) {
+			await this.config.updateMessage(this.thinkingMessageId, card);
+		} else {
+			this.thinkingMessageId = await this.config.postMessage(this.config.chatId, card);
+		}
+	}
+
+	/**
+	 * 完成思考卡片，显示最终内容
+	 * @param finalContent 最终内容（可选）
+	 */
+	async finishThinking(finalContent?: string): Promise<void> {
+		if (this.hideThinking || !this.thinkingMessageId) return;
+
+		if (finalContent) {
+			// 更新为最终内容
+			const card = autoBuildCard(finalContent);
+			await this.config.updateMessage(this.thinkingMessageId, card);
+		} else {
+			// 没有最终内容，删除思考卡片
+			await this.config.deleteMessage(this.thinkingMessageId);
+		}
+
+		this.thinkingMessageId = null;
+		this.currentThinking = "";
+	}
+
+	/**
+	 * 重置思考状态（用于新会话）
+	 */
+	resetThinking(): void {
+		this.thinkingMessageId = null;
+		this.currentThinking = "";
+	}
+
+	/**
+	 * 检查是否隐藏思考过程
+	 */
+	isThinkingHidden(): boolean {
+		return this.hideThinking;
 	}
 
 	/**

@@ -227,6 +227,42 @@ export function buildProgressCard(
 }
 
 /**
+ * 构建思考进度卡片
+ */
+export function buildThinkingProgressCard(thinking: string): CardContent {
+	// 限制长度，飞书卡片内容有限制
+	const truncated = thinking.length > 2000 ? thinking.substring(0, 2000) + "..." : thinking;
+
+	return {
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		body: {
+			elements: [
+				{
+					tag: "div",
+					text: {
+						tag: "lark_md",
+						content: "**💭 思考中...**",
+					},
+				},
+				{
+					tag: "hr",
+				},
+				{
+					tag: "div",
+					text: {
+						tag: "lark_md",
+						content: truncated,
+					},
+				},
+			],
+		},
+	};
+}
+
+/**
  * 智能构建卡片（根据内容自动选择样式）
  */
 export function autoBuildCard(text: string): CardContent {
