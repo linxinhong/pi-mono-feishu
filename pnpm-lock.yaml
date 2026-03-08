@@ -20,6 +20,9 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: ^0.55.3
         version: 0.55.4(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-tui':
+        specifier: ^0.57.1
+        version: 0.57.1
       '@sinclair/typebox':
         specifier: ^0.34.48
         version: 0.34.48
@@ -1006,6 +1009,10 @@ packages:
 
   '@mariozechner/pi-tui@0.55.4':
     resolution: {integrity: sha512-LXoa0CV58lEfzbjXyuUMa4KwoPTzTegPZJEEzuc9p7LnlIn4/eBebhTXQmQ7Hxo+/zb3zpy2qoynKpKcEas9GQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@mariozechner/pi-tui@0.57.1':
+    resolution: {integrity: sha512-cjoRghLbeAHV0tTJeHgZXaryUi5zzBZofeZ7uJun1gztnckLLRjoVeaPTujNlc5BIfyKvFqhh1QWCZng/MXlpg==}
     engines: {node: '>=20.0.0'}
 
   '@mistralai/mistralai@1.10.0':
@@ -4452,6 +4459,16 @@ snapshots:
       koffi: 2.15.1
       marked: 15.0.12
       mime-types: 3.0.2
+
+  '@mariozechner/pi-tui@0.57.1':
+    dependencies:
+      '@types/mime-types': 2.1.4
+      chalk: 5.6.2
+      get-east-asian-width: 1.5.0
+      marked: 15.0.12
+      mime-types: 3.0.2
+    optionalDependencies:
+      koffi: 2.15.1
 
   '@mistralai/mistralai@1.10.0':
     dependencies:

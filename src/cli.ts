@@ -19,6 +19,7 @@ import { registerLogsCommand } from "./cli/commands/logs.js";
 import { registerDaemonCommand } from "./cli/commands/daemon.js";
 import { registerPluginCommand } from "./cli/commands/plugin.js";
 import { registerAdapterCommand } from "./cli/commands/adapter.js";
+import { registerTUICommand } from "./cli/commands/tui.js";
 
 // ============================================================================
 // 版本获取
@@ -60,6 +61,7 @@ registerLogsCommand(program);
 registerDaemonCommand(program);
 registerPluginCommand(program);
 registerAdapterCommand(program);
+registerTUICommand(program);
 
 // 解析命令行参数
 program.parse();

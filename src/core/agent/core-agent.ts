@@ -125,6 +125,7 @@ async function preloadTools(): Promise<void> {
 		import("../tools/glob.js"),
 		import("../tools/grep.js"),
 		import("../tools/spawn.js"),
+		import("../tools/rtk.js"),
 	]);
 
 	toolsPreloaded = true;
@@ -480,6 +481,7 @@ export class CoreAgent {
 		const { createGlobTool } = await import("../tools/glob.js");
 		const { createGrepTool } = await import("../tools/grep.js");
 		const { createSpawnTool } = await import("../tools/spawn.js");
+		const { createRtkTool } = await import("../tools/rtk.js");
 
 		const tools = [
 			createBashTool(this.config.executor),
@@ -498,6 +500,7 @@ export class CoreAgent {
 				modelManager: this.config.modelManager,
 				workspaceDir: workspacePath,
 			}),
+			createRtkTool(this.config.executor),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, workspacePath),
 			// 添加 event 工具（如果 eventsWatcher 可用）
