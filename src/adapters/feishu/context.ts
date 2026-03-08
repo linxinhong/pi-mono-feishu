@@ -49,16 +49,92 @@ export class FeishuPlatformContext implements PlatformContext {
 	private config: FeishuContextConfig;
 	private statusMessageId: string | null = null; // 状态消息 ID
 	private toolHistory: string[] = []; // 工具执行历史
+	private updateTimer: ReturnType<typeof setTimeout> | null = null; // 防抖定时器
+	private pendingUpdate: boolean = false; // 是否有待处理的更新
 
 	constructor(config: FeishuContextConfig) {
 		this.config = config;
+	}
+
+	/**
+	 * 防抖更新状态卡片
+	 * 合并频繁的更新请求，避免触发飞书 API 频率限制
+	 */
+	private async debouncedUpdate(): Promise<void> {
+		this.pendingUpdate = true;
+
+		if (this.updateTimer) {
+			return; // 已有待处理的更新
+		}
+
+		this.updateTimer = setTimeout(async () => {
+			this.updateTimer = null;
+			if (this.pendingUpdate && this.statusMessageId) {
+				this.pendingUpdate = false;
+				const progressCard = JSON.stringify(buildProgressCard("🤔 处理中...", this.toolHistory));
+				try {
+					await this.config.updateMessage(this.statusMessageId, progressCard);
+				} catch (error) {
+					console.error("[FeishuContext] 更新状态卡片失败:", error);
+				}
+			}
+		}, 500); // 500ms 防抖
+	}
+
+	/**
+	 * 解析工具状态文本
+	 * @returns 解析结果：{ type: 'start' | 'end', toolName, status? }
+	 */
+	private parseToolStatus(text: string): { type: "start" | "end"; toolName: string; status?: "OK" | "X" } | null {
+		// 匹配开始状态: "-> tool_name"
+		const startMatch = text.match(/^-> (.+)$/);
+		if (startMatch) {
+			return { type: "start", toolName: startMatch[1] };
+		}
+
+		// 匹配结束状态: "-> OK tool_name" 或 "-> X tool_name"
+		const endMatch = text.match(/^-> (OK|X) (.+)$/);
+		if (endMatch) {
+			return { type: "end", toolName: endMatch[2], status: endMatch[1] as "OK" | "X" };
+		}
+
+		return null;
 	}
 
 	async sendText(chatId: string, text: string): Promise<string> {
 		// 如果是工具状态消息（以 "_ ->" 开头），记录到历史
 		if (text.startsWith("_ -> ") || text.startsWith("_Error:")) {
 			const cleanText = text.replace(/^_/, "").replace(/_$/, "");
-			this.toolHistory.push(cleanText);
+
+			// 解析工具状态
+			const parsed = this.parseToolStatus(cleanText);
+
+			if (parsed) {
+				if (parsed.type === "start") {
+					// 工具开始：添加新行，显示进行中状态
+					this.toolHistory.push(`⏳ ${parsed.toolName}`);
+				} else if (parsed.type === "end") {
+					// 工具结束：查找并更新对应的工具行（从后向前查找）
+					let lastIdx = -1;
+					for (let i = this.toolHistory.length - 1; i >= 0; i--) {
+						if (this.toolHistory[i].includes(parsed.toolName)) {
+							lastIdx = i;
+							break;
+						}
+					}
+					if (lastIdx >= 0) {
+						const icon = parsed.status === "OK" ? "✓" : "✗";
+						this.toolHistory[lastIdx] = `${icon} ${parsed.toolName}`;
+					} else {
+						// 如果找不到开始行，直接添加结果
+						const icon = parsed.status === "OK" ? "✓" : "✗";
+						this.toolHistory.push(`${icon} ${parsed.toolName}`);
+					}
+				}
+			} else {
+				// 其他状态消息直接添加
+				this.toolHistory.push(cleanText);
+			}
 		}
 
 		// 如果还没有状态消息，先创建一个
@@ -67,10 +143,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.statusMessageId = await this.config.postMessage(chatId, initialCard);
 		}
 
-		// 更新状态卡片
+		// 使用防抖更新状态卡片
 		if (this.toolHistory.length > 0) {
-			const progressCard = JSON.stringify(buildProgressCard("🤔 处理中...", this.toolHistory));
-			await this.config.updateMessage(this.statusMessageId, progressCard);
+			await this.debouncedUpdate();
 		}
 
 		return this.statusMessageId;
@@ -108,6 +183,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 重置状态（用于新会话）
 	 */
 	resetStatus(): void {
+		// 清除待处理的定时器
+		if (this.updateTimer) {
+			clearTimeout(this.updateTimer);
+			this.updateTimer = null;
+		}
+		this.pendingUpdate = false;
 		this.statusMessageId = null;
 		this.toolHistory = [];
 	}
