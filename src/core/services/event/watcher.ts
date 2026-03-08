@@ -310,7 +310,7 @@ export class EventsWatcher {
 		let success = true;
 		let error: string | undefined;
 		try {
-			this.onEvent(event.channelId, event.text);
+			await this.onEvent(event.channelId, event.text);
 		} catch (e) {
 			success = false;
 			error = e instanceof Error ? e.message : String(e);
