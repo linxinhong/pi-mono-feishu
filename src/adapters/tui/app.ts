@@ -385,15 +385,19 @@ export class PiClawTUI {
 	 * 启动 TUI
 	 */
 	async start(): Promise<void> {
+		console.log("[TUI] Initializing terminal...");
 		this.terminal = new ProcessTerminal();
+		console.log("[TUI] Creating TUI instance...");
 		this.tui = new TUI(this.terminal);
 
-		// Show startup menu first
-		await this.showStartupMenu();
-
-		// Start main loop
+		// Start main loop first (needed for rendering and input)
 		this.running = true;
+		console.log("[TUI] Starting main loop...");
 		this.tui.start();
+
+		// Show startup menu
+		console.log("[TUI] Showing startup menu...");
+		await this.showStartupMenu();
 	}
 
 	/**
