@@ -1,21 +1,29 @@
 /**
- * Feishu V2 Outbound - Index
+ * Feishu V2 Outbound Module
  *
- * 出站消息功能统一入口
+ * 飞书出站消息功能统一入口
  */
 
-export { FeishuOutbound } from "./send.js";
-export { FeishuReactions, EMOJI_TYPES } from "./reactions.js";
-export { FeishuThread } from "./thread.js";
-export { FeishuChatManage, type ChatInfo, type ChatMember } from "./chat-manage.js";
+// ============================================================================
+// 发送消息
+// ============================================================================
 
-// Re-export types
-export type {
-	FeishuMessageType,
-	SendMessageOptions,
-	UpdateMessageOptions,
-	ThreadReplyOptions,
-	FeishuEmojiType,
-	Reaction,
-	CardContent,
-} from "../types.js";
+export { FeishuOutbound } from "./send.js";
+
+// ============================================================================
+// 表情反应
+// ============================================================================
+
+export { FeishuReactions, EMOJI_TYPES, type EmojiReaction } from "./reactions.js";
+
+// ============================================================================
+// 线程回复
+// ============================================================================
+
+export { FeishuThread } from "./thread.js";
+
+// ============================================================================
+// 群组管理
+// ============================================================================
+
+export { FeishuChatManage, type ChatInfo, type ChatMember } from "./chat-manage.js";

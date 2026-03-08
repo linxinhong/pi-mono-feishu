@@ -8,16 +8,14 @@ import type { UniversalMessage } from "../../core/platform/message.js";
 import type {
 	FeishuMessageEvent,
 	FeishuEventMessage,
+	FeishuEventSender,
 	TextContent,
 	PostContent,
-	ImageContent,
-	FileContent,
-	AudioContent,
 	Mention,
 } from "./types.js";
 
 // ============================================================================
-// 消息解析
+// Message Parser
 // ============================================================================
 
 /**
@@ -31,7 +29,52 @@ export function parseFeishuMessage(
 	const sender = event.sender;
 
 	// 解析消息内容
-	const { text, files, mentions } = parseMessageContent(message);
+	let text = "";
+	let files: Array<{ name: string; originalId: string; localPath: string; type: "image" | "file" | "audio" | "video" }> | undefined;
+	const mentions: string[] = [];
+
+	try {
+		const parsedContent = JSON.parse(message.content);
+
+		if (message.message_type === "text") {
+			text = parsedContent.text || "";
+			// 提取 @ 提及
+			extractMentionsFromText(text, mentions);
+		} else if (message.message_type === "post") {
+			const { text: postText, mentions: postMentions } = extractTextFromPost(parsedContent);
+			text = postText;
+			mentions.push(...postMentions);
+		} else if (message.message_type === "image") {
+			files = [{
+				name: `image_${parsedContent.image_key}.jpg`,
+				originalId: parsedContent.image_key,
+				localPath: "", // 需要下载后填充
+				type: "image",
+			}];
+			text = "[图片]";
+		} else if (message.message_type === "file" || message.message_type === "audio" || message.message_type === "media") {
+			const fileType: "audio" | "file" = message.message_type === "audio" ? "audio" : "file";
+			const fileName = parsedContent.file_name || `audio_${parsedContent.file_key}.${message.message_type === "audio" ? "opus" : "file"}`;
+			files = [{
+				name: fileName,
+				originalId: parsedContent.file_key,
+				localPath: "", // 需要下载后填充
+				type: fileType,
+			}];
+			text = parsedContent.file_name || "[语音]";
+		} else if (message.message_type === "interactive") {
+			// 卡片消息
+			text = "[卡片消息]";
+		} else if (message.message_type === "sticker") {
+			// 表情包消息
+			text = "[表情]";
+		}
+	} catch {
+		text = message.content;
+	}
+
+	// 移除 @ 提及标记
+	text = text.replace(/@_user_[\d]+/g, "").trim();
 
 	return {
 		id: message.message_id,
@@ -45,134 +88,15 @@ export function parseFeishuMessage(
 		},
 		chat: {
 			id: message.chat_id,
-			type: message.chat_type === "p2p" ? "dm" : "group",
+			type: message.chat_type === "p2p" ? "private" : "group",
 		},
 		attachments: files,
 		timestamp: new Date(parseInt(message.create_time) || Date.now()),
 		mentions,
-		// 保留原始消息信息
-		raw: {
-			rootId: message.root_id,
-			parentId: message.parent_id,
-			messageType: message.message_type,
-		},
-	} as UniversalMessage & { raw: any };
-}
-
-/**
- * 解析消息内容
- */
-function parseMessageContent(message: FeishuEventMessage): {
-	text: string;
-	files?: UniversalMessage["attachments"];
-	mentions: Mention[];
-} {
-	let text = "";
-	let files: UniversalMessage["attachments"];
-	const mentions: Mention[] = [];
-
-	try {
-		const parsedContent = JSON.parse(message.content);
-
-		switch (message.message_type) {
-			case "text": {
-				const textContent = parsedContent as TextContent;
-				text = textContent.text || "";
-				// 解析 @ 提及
-				const mentionMatches = text.match(/@_user_(\d+)/g);
-				if (mentionMatches) {
-					for (const match of mentionMatches) {
-						mentions.push({
-							type: "user",
-							userId: match.replace("@_user_", ""),
-							rawText: match,
-						});
-					}
-				}
-				// 移除 @ 提及标记
-				text = text.replace(/@_user_\d+/g, "").trim();
-				break;
-			}
-
-			case "post": {
-				const postContent = parsedContent as PostContent;
-				const result = extractTextFromPost(postContent);
-				text = result.text;
-				mentions.push(...result.mentions);
-				break;
-			}
-
-			case "image": {
-				const imageContent = parsedContent as ImageContent;
-				files = [
-					{
-						name: `image_${imageContent.image_key}.jpg`,
-						originalId: imageContent.image_key,
-						localPath: "",
-						type: "image",
-					},
-				];
-				text = "[图片]";
-				break;
-			}
-
-			case "file": {
-				const fileContent = parsedContent as FileContent;
-				files = [
-					{
-						name: fileContent.file_name || `file_${fileContent.file_key}`,
-						originalId: fileContent.file_key,
-						localPath: "",
-						type: "file",
-					},
-				];
-				text = fileContent.file_name || "[文件]";
-				break;
-			}
-
-			case "audio": {
-				const audioContent = parsedContent as AudioContent;
-				files = [
-					{
-						name: `audio_${audioContent.file_key}.opus`,
-						originalId: audioContent.file_key,
-						localPath: "",
-						type: "audio",
-					},
-				];
-				text = "[语音]";
-				break;
-			}
-
-			case "media": {
-				const mediaContent = parsedContent as FileContent & AudioContent;
-				const fileType = mediaContent.duration ? "video" : "file";
-				files = [
-					{
-						name: mediaContent.file_name || `media_${mediaContent.file_key}`,
-						originalId: mediaContent.file_key,
-						localPath: "",
-						type: fileType,
-					},
-				];
-				text = mediaContent.file_name || "[媒体]";
-				break;
-			}
-
-			case "interactive": {
-				// 卡片消息，提取文本内容
-				text = extractTextFromCard(parsedContent);
-				break;
-			}
-
-			default:
-				text = message.content;
-		}
-	} catch {
-		text = message.content;
-	}
-
-	return { text, files, mentions };
+		// 线程回复相关
+		...(message.root_id && { threadId: message.root_id }),
+		...(message.parent_id && { replyTo: message.parent_id }),
+	};
 }
 
 /**
@@ -180,77 +104,55 @@ function parseMessageContent(message: FeishuEventMessage): {
  */
 function extractTextFromPost(postContent: PostContent): {
 	text: string;
-	mentions: Mention[];
+	mentions: string[];
 } {
-	if (!postContent.content) return { text: "", mentions: [] };
+	const mentions: string[] = [];
 
-	const mentions: Mention[] = [];
+	if (!postContent.content) return { text: "", mentions };
 
 	const extractText = (elements: any[]): string => {
 		return elements
 			.map((el) => {
-				if (el.tag === "text") {
-					return el.text || "";
-				}
+				if (el.tag === "text") return el.text || "";
 				if (el.tag === "at") {
-					// 记录提及
-					mentions.push({
-						type: "user",
-						userId: el.user_id,
-						userName: el.text?.replace("@", ""),
-						rawText: el.text || "",
-					});
-					return ""; // 不在文本中显示 @
-				}
-				if (el.tag === "a") {
+					// 提取 @ 提及
+					if (el.user_id) {
+						mentions.push(el.user_id);
+					}
 					return el.text || "";
 				}
-				if (el.children) {
-					return extractText(el.children);
-				}
+				if (el.children) return extractText(el.children);
 				return "";
 			})
 			.join("");
 	};
 
+	let text = "";
 	if (Array.isArray(postContent.content)) {
-		const text = postContent.content
+		text = postContent.content
 			.map((block: any) => {
 				if (block.children) return extractText(block.children);
 				return "";
 			})
 			.join("\n");
-
-		return { text, mentions };
 	}
 
-	return { text: "", mentions };
+	return { text, mentions };
 }
 
 /**
- * 从卡片消息中提取文本
+ * 从文本中提取 @ 提及
  */
-function extractTextFromCard(cardContent: any): string {
-	if (!cardContent.body?.elements) return "";
-
-	const extractFromElements = (elements: any[]): string => {
-		return elements
-			.map((el) => {
-				if (el.tag === "div" && el.text?.content) {
-					return el.text.content;
-				}
-				if (el.tag === "markdown" && el.content) {
-					return el.content;
-				}
-				if (el.elements) {
-					return extractFromElements(el.elements);
-				}
-				return "";
-			})
-			.join("\n");
-	};
-
-	return extractFromElements(cardContent.body.elements);
+function extractMentionsFromText(
+	text: string,
+	mentions: string[],
+): void {
+	// 匹配 @_user_xxx 格式
+	const mentionRegex = /@_user_([^\s]+)/g;
+	let match;
+	while ((match = mentionRegex.exec(text)) !== null) {
+		mentions.push(match[1]);
+	}
 }
 
 /**
@@ -260,7 +162,6 @@ function getMessageType(messageType: string): UniversalMessage["type"] {
 	switch (messageType) {
 		case "text":
 		case "post":
-		case "interactive":
 			return "text";
 		case "image":
 			return "image";
@@ -269,64 +170,100 @@ function getMessageType(messageType: string): UniversalMessage["type"] {
 		case "file":
 		case "media":
 			return "file";
+		case "interactive":
+		case "sticker":
 		default:
 			return "text";
 	}
 }
 
 // ============================================================================
-// 工具函数
+// Helper Functions
 // ============================================================================
 
 /**
- * 检查是否是话题回复
+ * 判断是否是线程回复
  */
-export function isThreadReply(message: FeishuEventMessage): boolean {
-	return !!message.root_id;
+export function isThreadReply(event: FeishuMessageEvent): boolean {
+	return !!event.message.root_id;
 }
 
 /**
- * 检查是否是 P2P 消息
+ * 判断是否是私聊消息
  */
-export function isP2PMessage(message: FeishuEventMessage): boolean {
-	return message.chat_type === "p2p";
+export function isP2PMessage(event: FeishuMessageEvent): boolean {
+	return event.message.chat_type === "p2p";
 }
 
 /**
- * 检查消息是否提及了机器人
+ * 判断是否是群聊消息
  */
-export function isBotMention(message: FeishuEventMessage, botUserId: string): boolean {
+export function isGroupMessage(event: FeishuMessageEvent): boolean {
+	return event.message.chat_type === "group";
+}
+
+/**
+ * 判断是否 @ 了机器人
+ */
+export function isBotMention(
+	event: FeishuMessageEvent,
+	botUserId: string,
+): boolean {
+	const message = event.message;
+
+	// 检查内容中是否有 @ 机器人
 	try {
 		const content = JSON.parse(message.content);
-		// 检查文本消息中的 @ 提及
+
+		// 文本消息
 		if (message.message_type === "text") {
-			return content.text?.includes(`@_user_${botUserId}`);
+			return content.text?.includes(`@_user_${botUserId}`) || false;
 		}
-		// 检查富文本消息中的 @ 提及
-		if (message.message_type === "post") {
-			return JSON.stringify(content).includes(`"user_id":"${botUserId}"`);
+
+		// 富文本消息
+		if (message.message_type === "post" && content.content) {
+			const checkMention = (elements: any[]): boolean => {
+				return elements.some((el) => {
+					if (el.tag === "at" && el.user_id === botUserId) return true;
+					if (el.children) return checkMention(el.children);
+					return false;
+				});
+			};
+			return content.content.some((block: any) =>
+				block.children ? checkMention(block.children) : false,
+			);
 		}
-		return false;
 	} catch {
-		return false;
+		// 解析失败，返回 false
 	}
+
+	return false;
 }
 
 /**
  * 构建文本消息内容
  */
 export function buildTextContent(text: string): string {
-	return JSON.stringify({ text });
+	return JSON.stringify({ text } as TextContent);
 }
 
 /**
  * 构建富文本消息内容
  */
-export function buildPostContent(paragraphs: any[]): string {
+export function buildPostContent(
+	blocks: Array<{
+		tag: string;
+		text?: string;
+		children?: Array<{ tag: string; text?: string; user_id?: string }>;
+	}>,
+): string {
+	const content = blocks.map((block) => ({
+		tag: block.tag,
+		children: block.children || (block.text ? [{ tag: "text", text: block.text }] : []),
+	}));
+
 	return JSON.stringify({
-		zh_cn: {
-			title: "",
-			content: paragraphs,
-		},
-	});
+		content,
+		version: "1.0",
+	} as PostContent);
 }

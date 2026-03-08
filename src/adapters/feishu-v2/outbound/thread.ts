@@ -1,163 +1,195 @@
 /**
  * Feishu V2 Outbound - Thread
  *
- * 线程/话题回复功能
+ * 飞书线程回复功能
  */
 
 import type * as lark from "@larksuiteoapi/node-sdk";
-import type { ThreadReplyOptions, CardContent } from "../types.js";
+import type { FeishuMessageType } from "../types.js";
 
 // ============================================================================
-// 线程回复发送类
+// Types
+// ============================================================================
+
+/**
+ * 线程回复选项
+ */
+export interface ThreadReplyOptions {
+	/** 聊天 ID */
+	chatId: string;
+	/** 根消息 ID */
+	rootId: string;
+	/** 消息内容 */
+	content: string;
+	/** 消息类型 */
+	msgType?: FeishuMessageType;
+}
+
+/**
+ * 线程消息信息
+ */
+export interface ThreadMessage {
+	messageId: string;
+	rootId: string;
+	parentId?: string;
+	content: string;
+	msgType: string;
+	createTime: number;
+	sender: {
+		userId: string;
+		userName?: string;
+	};
+}
+
+// ============================================================================
+// Feishu Thread
 // ============================================================================
 
 /**
  * 飞书线程回复管理器
  */
 export class FeishuThread {
-	constructor(private client: lark.Client) {}
+	private client: lark.Client;
 
-	/**
-	 * 在话题中回复
-	 * @param chatId 聊天 ID
-	 * @param rootId 根消息 ID
-	 * @param text 回复内容
-	 */
-	async postInThread(chatId: string, rootId: string, text: string): Promise<string> {
-		return this.sendThreadMessage({
-			chatId,
-			rootId,
-			content: text,
-			msgType: "text",
-		});
+	constructor(client: lark.Client) {
+		this.client = client;
 	}
 
 	/**
-	 * 在话题中回复卡片
+	 * 在线程中回复
 	 */
-	async postCardInThread(chatId: string, rootId: string, card: CardContent | string): Promise<string> {
-		const cardContent = typeof card === "string" ? card : JSON.stringify(card);
-		return this.sendThreadMessage({
-			chatId,
-			rootId,
-			content: cardContent,
-			msgType: "interactive",
-		});
-	}
+	async postInThread(
+		chatId: string,
+		rootId: string,
+		content: string,
+		msgType: FeishuMessageType = "text",
+	): Promise<string> {
+		const actualContent = msgType === "text"
+			? JSON.stringify({ text: content })
+			: content;
 
-	/**
-	 * 发送话题消息
-	 */
-	async sendThreadMessage(options: ThreadReplyOptions): Promise<string> {
 		const result = await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: options.chatId,
-				msg_type: options.msgType || "text",
-				content:
-					options.msgType === "text"
-						? JSON.stringify({ text: options.content })
-						: options.content,
-				root_id: options.rootId,
+			params: {
+				receive_id_type: "chat_id",
 			},
+			data: {
+				receive_id: chatId,
+				msg_type: msgType,
+				content: actualContent,
+				root_id: rootId,
+			} as any,
 		});
 
 		if (result.code !== 0) {
-			throw new Error(`Failed to send thread message: ${result.msg}`);
+			throw new Error(`Failed to post in thread: ${result.msg}`);
 		}
 
 		return result.data?.message_id || "";
 	}
 
 	/**
-	 * 更新话题消息
+	 * 在线程中发送文本回复
 	 */
-	async updateThreadMessage(messageId: string, content: string | CardContent): Promise<void> {
-		const cardContent = typeof content === "string" ? content : JSON.stringify(content);
-
-		await this.client.im.message.patch({
-			path: { message_id: messageId },
-			data: { content: cardContent },
-		} as any);
+	async replyText(chatId: string, rootId: string, text: string): Promise<string> {
+		return this.postInThread(chatId, rootId, text, "text");
 	}
 
 	/**
-	 * 删除话题消息
+	 * 在线程中发送卡片回复
 	 */
-	async deleteThreadMessage(messageId: string): Promise<void> {
-		await this.client.im.message.delete({
-			path: { message_id: messageId },
-		});
+	async replyCard(chatId: string, rootId: string, cardContent: string): Promise<string> {
+		return this.postInThread(chatId, rootId, cardContent, "interactive");
 	}
 
 	/**
-	 * 获取话题中的所有回复
+	 * 在线程中发送图片回复
 	 */
-	async getThreadReplies(
-		rootMessageId: string,
+	async replyImage(chatId: string, rootId: string, imageKey: string): Promise<string> {
+		return this.postInThread(chatId, rootId, JSON.stringify({ image_key: imageKey }), "image");
+	}
+
+	/**
+	 * 获取线程消息列表
+	 */
+	async getThreadMessages(
+		rootId: string,
 		options?: {
 			pageSize?: number;
 			pageToken?: string;
 		},
-	): Promise<{ messages: any[]; pageToken?: string }> {
-		const result = await this.client.im.message.list({
+	): Promise<{ messages: ThreadMessage[]; pageToken?: string; hasMore: boolean }> {
+		const result = await (this.client.im.message as any).replies?.list?.({
+			path: {
+				message_id: rootId,
+			},
 			params: {
-				container_id_type: "thread",
-				container_id: rootMessageId,
 				page_size: options?.pageSize || 50,
 				page_token: options?.pageToken,
 			},
-		} as any);
+		});
 
-		if (result.code !== 0) {
-			throw new Error(`Failed to get thread replies: ${result.msg}`);
+		if (result?.code !== 0) {
+			throw new Error(`Failed to get thread messages: ${result?.msg}`);
 		}
 
 		return {
-			messages: result.data?.items || [],
+			messages: (result.data?.items || []).map((item: any) => ({
+				messageId: item.message_id,
+				rootId: item.root_id,
+				parentId: item.parent_id,
+				content: item.content,
+				msgType: item.msg_type,
+				createTime: parseInt(item.create_time) || 0,
+				sender: {
+					userId: item.sender?.id || "",
+					userName: item.sender?.name,
+				},
+			})),
 			pageToken: result.data?.page_token,
+			hasMore: result.data?.has_more || false,
 		};
 	}
 
 	/**
-	 * 获取话题根消息
+	 * 获取线程消息数量
 	 */
-	async getThreadRoot(messageId: string): Promise<any> {
-		// 首先获取消息信息
-		const message = await this.client.im.message.get({
-			path: { message_id: messageId },
-		});
-
-		if (message.code !== 0) {
-			throw new Error(`Failed to get message: ${message.msg}`);
-		}
-
-		// 如果有 root_id，获取根消息
-		if (message.data?.root_id) {
-			const root = await this.client.im.message.get({
-				path: { message_id: message.data.root_id },
-			});
-
-			if (root.code === 0) {
-				return root.data;
-			}
-		}
-
-		return message.data;
+	async getThreadMessageCount(rootId: string): Promise<number> {
+		const result = await this.getThreadMessages(rootId, { pageSize: 1 });
+		// 注意：这里只是估算，如果需要精确数量需要遍历所有页
+		return result.hasMore ? 50 : result.messages.length;
 	}
 
 	/**
-	 * 判断消息是否是话题消息
+	 * 判断消息是否有线程回复
 	 */
-	async isThreadMessage(messageId: string): Promise<boolean> {
-		const message = await this.client.im.message.get({
-			path: { message_id: messageId },
-		});
-
-		if (message.code !== 0) {
+	async hasThread(rootId: string): Promise<boolean> {
+		try {
+			const result = await this.getThreadMessages(rootId, { pageSize: 1 });
+			return result.messages.length > 0;
+		} catch {
 			return false;
 		}
+	}
 
-		return !!message.data?.root_id || !!message.data?.thread_id;
+	/**
+	 * 批量获取线程消息
+	 */
+	async getBatchThreadMessages(
+		rootIds: string[],
+	): Promise<Map<string, ThreadMessage[]>> {
+		const resultMap = new Map<string, ThreadMessage[]>();
+
+		await Promise.all(
+			rootIds.map(async (rootId) => {
+				try {
+					const result = await this.getThreadMessages(rootId, { pageSize: 100 });
+					resultMap.set(rootId, result.messages);
+				} catch (error) {
+					resultMap.set(rootId, []);
+				}
+			}),
+		);
+
+		return resultMap;
 	}
 }
