@@ -21,7 +21,6 @@ import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
 import { ConfigManager } from "./core/config/manager.js";
 
 // 重新导出主要入口函数和类型（供外部使用）
-export { createFeishuBot } from "./adapters/feishu/index.js";
 export type { SandboxConfig } from "./core/sandbox/index.js";
 export { adapterRegistry } from "./core/adapter/index.js";
 

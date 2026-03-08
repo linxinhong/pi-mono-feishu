@@ -134,6 +134,7 @@ class ChatPanel extends Container implements Focusable {
 	private cursorPos = 0;
 	public focused = false;
 	public onSendMessage?: (content: string, channelId: string) => void;
+	public onCommand?: (command: string, args: string) => void;
 
 	constructor(tui: TUI, theme: TUITheme) {
 		super();
@@ -151,6 +152,10 @@ class ChatPanel extends Container implements Focusable {
 		this.tui.requestRender();
 	}
 
+	getCurrentChannel(): string {
+		return this.currentChannelId;
+	}
+
 	setChannel(channelId: string): void {
 		this.currentChannelId = channelId;
 		this.tui.requestRender();
@@ -159,7 +164,18 @@ class ChatPanel extends Container implements Focusable {
 	handleInput(data: string): void {
 		if (matchesKey(data, Key.enter)) {
 			if (this.inputBuffer.trim()) {
-				this.onSendMessage?.(this.inputBuffer.trim(), this.currentChannelId);
+				const input = this.inputBuffer.trim();
+
+				// 检查是否是命令（以 / 开头）
+				if (input.startsWith("/")) {
+					const parts = input.slice(1).split(" ");
+					const command = parts[0].toLowerCase();
+					const args = parts.slice(1).join(" ");
+					this.onCommand?.(command, args);
+				} else {
+					this.onSendMessage?.(input, this.currentChannelId);
+				}
+
 				this.inputBuffer = "";
 				this.cursorPos = 0;
 			}
@@ -441,6 +457,9 @@ export class PiClawTUI {
 			this.chatPanel.onSendMessage = (content, channelId) => {
 				this.emit({ type: "message-send", content, channelId });
 			};
+			this.chatPanel.onCommand = (command, args) => {
+				this.handleCommand(command, args);
+			};
 			this.tui.addChild(this.chatPanel);
 			this.tui.setFocus(this.chatPanel);
 		}
@@ -486,6 +505,39 @@ export class PiClawTUI {
 			} catch (error) {
 				console.error("TUI event listener error:", error);
 			}
+		}
+	}
+
+	/**
+	 * 处理命令
+	 */
+	private handleCommand(command: string, args: string): void {
+		switch (command) {
+			case "exit":
+			case "quit":
+			case "q":
+				this.emit({ type: "exit" });
+				break;
+			case "clear":
+				this.chatPanel?.clearMessages();
+				break;
+			case "help":
+				this.addChatMessage({
+					id: `help-${Date.now()}`,
+					role: "system",
+					content: "Available commands:\n  /exit - Exit TUI\n  /clear - Clear messages\n  /help - Show this help",
+					timestamp: new Date(),
+					channelId: this.chatPanel?.getCurrentChannel() || "default",
+				});
+				break;
+			default:
+				this.addChatMessage({
+					id: `unknown-${Date.now()}`,
+					role: "system",
+					content: `Unknown command: /${command}. Type /help for available commands.`,
+					timestamp: new Date(),
+					channelId: this.chatPanel?.getCurrentChannel() || "default",
+				});
 		}
 	}
 

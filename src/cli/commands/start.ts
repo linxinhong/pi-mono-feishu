@@ -4,7 +4,7 @@
 
 import { Command } from "commander";
 import { parseSandboxArg, validateSandbox, type SandboxConfig } from "../../core/sandbox/index.js";
-import { createFeishuBot } from "../../adapters/feishu/bot.js";
+import { adapterRegistry, loadAdapters, type BotConfig } from "../../core/adapter/index.js";
 import { loadConfig } from "../../utils/config.js";
 import * as log from "../../utils/logger/index.js";
 
@@ -37,11 +37,27 @@ export function registerStartCommand(program: Command): void {
 				// 验证 sandbox
 				await validateSandbox(sandboxConfig);
 
-				// 启动机器人
-				const bot = await createFeishuBot({
-					configPath: options.config,
-					sandboxConfig,
-				});
+				// 加载所有适配器
+				await loadAdapters();
+
+				// 获取 feishu 工厂
+				const factory = adapterRegistry.get("feishu");
+				if (!factory) {
+					throw new Error("Feishu adapter not found in registry");
+				}
+
+				// 构建配置
+				const feishuConfig = config.feishu as Record<string, any> || {};
+				const botConfig: BotConfig = {
+					workspaceDir: config.workspaceDir!,
+					plugins: config.plugins,
+					sandbox: sandboxConfig,
+					port: config.port,
+					...feishuConfig,
+				};
+
+				// 创建并启动机器人
+				const bot = await factory.createBot(botConfig);
 				await bot.start(config.port!);
 
 				log.logConnected();

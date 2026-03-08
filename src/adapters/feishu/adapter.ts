@@ -1,13 +1,14 @@
 /**
- * Feishu Adapter
+ * Feishu V2 Adapter
  *
  * 飞书平台适配器 - 实现 PlatformAdapter 接口
+ * 完整支持消息收发、卡片、表情反应、线程回复等功能
  */
 
 import * as lark from "@larksuiteoapi/node-sdk";
 import express, { type Request, type Response } from "express";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
-import { basename, join } from "path";
+import { readFileSync } from "fs";
+import { basename } from "path";
 import type {
 	PlatformAdapter,
 	PlatformConfig,
@@ -19,38 +20,20 @@ import type {
 import type { PlatformContext } from "../../core/platform/context.js";
 import { FeishuPlatformContext } from "./context.js";
 import { parseFeishuMessage } from "./message-parser.js";
+import type { FeishuAdapterConfig, FeishuMessageEvent, CardContent } from "./types.js";
 import type { Logger } from "../../utils/logger/index.js";
 import { PiLogger } from "../../utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
-import { buildTextCard } from "./cards/index.js";
+import { buildTextCard, FeishuCards } from "./cards.js";
+import { FeishuOutbound } from "./outbound/send.js";
+import { FeishuReactions } from "./outbound/reactions.js";
+import { FeishuThread } from "./outbound/thread.js";
+import { FeishuChatManage } from "./outbound/chat-manage.js";
 
 // ============================================================================
-// Types
+// 频道队列
 // ============================================================================
 
-/**
- * 飞书适配器配置
- */
-export interface FeishuAdapterConfig extends PlatformConfig {
-	/** 应用 ID */
-	appId: string;
-	/** 应用密钥 */
-	appSecret: string;
-	/** 工作目录 */
-	workingDir: string;
-	/** 是否使用 WebSocket */
-	useWebSocket?: boolean;
-	/** 服务端口 */
-	port?: number;
-	/** 日志器 */
-	logger?: Logger;
-	/** adapter 级别默认模型 */
-	model?: string;
-}
-
-/**
- * 频道队列
- */
 type QueuedWork = () => Promise<void>;
 
 class ChannelQueue {
@@ -73,7 +56,7 @@ class ChannelQueue {
 		try {
 			await work();
 		} catch (err) {
-			console.error("[FeishuAdapter Queue] Error:", err);
+			console.error("[FeishuV2Adapter Queue] Error:", err);
 		}
 		this.processing = false;
 		this.processNext();
@@ -81,42 +64,57 @@ class ChannelQueue {
 }
 
 // ============================================================================
-// Feishu Adapter
+// Feishu V2 Adapter
 // ============================================================================
 
 /**
- * 飞书平台适配器
+ * 飞书平台适配器 V2
  */
 export class FeishuAdapter implements PlatformAdapter {
 	readonly platform = "feishu";
 
+	// 核心组件
 	private client: lark.Client;
 	private wsClient: lark.WSClient | null = null;
 	private app: ReturnType<typeof express> | null = null;
 	private workingDir: string;
 	private logger: Logger;
 	private defaultModel: string | undefined;
+	private hideThinking: boolean;
 
+	// 出站功能
+	private outbound: FeishuOutbound;
+	private reactions: FeishuReactions;
+	private thread: FeishuThread;
+	private chatManage: FeishuChatManage;
+	private cards: FeishuCards;
+
+	// 缓存
 	private users = new Map<string, UserInfo>();
 	private channels = new Map<string, ChannelInfo>();
 	private queues = new Map<string, ChannelQueue>();
 	private messageHandlers: Array<(message: UniversalMessage) => void> = [];
 	private processedMessages = new Set<string>();
 
+	// 状态
 	private runningChannels = new Map<string, { abort: () => void }>();
 	private startupTs: string | null = null;
+	private botUserId: string | null = null;
 
 	constructor(config: FeishuAdapterConfig) {
 		this.workingDir = config.workingDir;
-		this.logger = config.logger || new PiLogger("feishu:adapter");
+		this.logger = config.logger || new PiLogger("feishu-v2:adapter");
 		this.defaultModel = config.model;
+		this.hideThinking = config.hideThinking ?? false;
 
+		// 初始化飞书客户端
 		this.client = new lark.Client({
 			appId: config.appId,
 			appSecret: config.appSecret,
 			disableTokenCache: false,
 		});
 
+		// 初始化 WebSocket 客户端
 		if (config.useWebSocket !== false) {
 			this.wsClient = new lark.WSClient({
 				appId: config.appId,
@@ -125,7 +123,17 @@ export class FeishuAdapter implements PlatformAdapter {
 			});
 		}
 
-		this.logger.debug("FeishuAdapter initialized", { appId: config.appId, defaultModel: this.defaultModel });
+		// 初始化出站功能
+		this.outbound = new FeishuOutbound(this.client);
+		this.reactions = new FeishuReactions(this.client);
+		this.thread = new FeishuThread(this.client);
+		this.chatManage = new FeishuChatManage(this.client);
+		this.cards = new FeishuCards(this.client);
+
+		this.logger.debug("FeishuAdapter V2 initialized", {
+			appId: config.appId,
+			defaultModel: this.defaultModel,
+		});
 	}
 
 	// ========================================================================
@@ -137,6 +145,9 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	async start(): Promise<void> {
+		// 获取 Bot 信息
+		await this.fetchBotInfo();
+
 		// 获取用户和频道列表
 		await Promise.all([this.fetchUsers(), this.fetchChannels()]);
 		this.logger.info(`Loaded ${this.channels.size} channels, ${this.users.size} users`);
@@ -148,7 +159,7 @@ export class FeishuAdapter implements PlatformAdapter {
 		if (this.wsClient) {
 			await this.startWebSocket();
 		} else {
-			await this.startWebhook(3000); // 默认端口 3000
+			await this.startWebhook(3000);
 		}
 
 		// 触发 ADAPTER_CONNECT hook
@@ -170,7 +181,7 @@ export class FeishuAdapter implements PlatformAdapter {
 				timestamp: new Date(),
 			});
 		}
-		this.logger.info("FeishuAdapter stopped");
+		this.logger.info("FeishuAdapter V2 stopped");
 	}
 
 	async sendMessage(response: UniversalResponse): Promise<void> {
@@ -178,38 +189,12 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	async updateMessage(messageId: string, response: UniversalResponse): Promise<void> {
-		let content: string;
-
-		// 检查是否已经是飞书卡片格式
-		if (typeof response.content === "string") {
-			try {
-				const parsed = JSON.parse(response.content);
-				if (parsed.schema === "2.0" && parsed.body) {
-					// 已经是飞书卡片格式，直接使用
-					content = response.content;
-				} else {
-					// 普通文本，包装成卡片
-					content = this.buildTextCard(response.content);
-				}
-			} catch {
-				// JSON 解析失败，当作普通文本处理
-				content = this.buildTextCard(response.content);
-			}
-		} else {
-			// 对象格式，序列化后包装成卡片
-			content = this.buildTextCard(JSON.stringify(response.content));
-		}
-
-		await this.client.im.message.patch({
-			path: { message_id: messageId },
-			data: { content },
-		} as any);
+		const content = typeof response.content === "string" ? response.content : JSON.stringify(response.content);
+		await this.outbound.updateTextMessage(messageId, content);
 	}
 
 	async deleteMessage(messageId: string): Promise<void> {
-		await this.client.im.message.delete({
-			path: { message_id: messageId },
-		});
+		await this.outbound.deleteMessage(messageId);
 	}
 
 	async uploadFile(filePath: string): Promise<string> {
@@ -261,7 +246,29 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	async getUserInfo(userId: string): Promise<UserInfo | undefined> {
-		return this.users.get(userId);
+		let userInfo = this.users.get(userId);
+		if (userInfo) return userInfo;
+
+		try {
+			const result = await this.client.contact.user.get({
+				path: { user_id: userId },
+			});
+
+			if (result.code === 0 && result.data?.user) {
+				const user = result.data.user;
+				userInfo = {
+					id: user.user_id || userId,
+					userName: user.name || user.user_id || userId,
+					displayName: user.nickname || user.name || user.user_id || userId,
+				};
+				this.users.set(userId, userInfo);
+				return userInfo;
+			}
+		} catch (err) {
+			this.logger.error(`Failed to get user info: ${userId}`, undefined, err instanceof Error ? err : new Error(String(err)));
+		}
+
+		return undefined;
 	}
 
 	async getAllUsers(): Promise<UserInfo[]> {
@@ -284,14 +291,31 @@ export class FeishuAdapter implements PlatformAdapter {
 		return new FeishuPlatformContext({
 			client: this.client,
 			chatId,
-			postMessage: async (chatId, text) => this.postMessage(chatId, text),
-			updateMessage: async (messageId, text) => this.updateMessage(messageId, { type: "text", content: text }),
+			adapter: this,
+			postMessage: async (chatId, content: string | CardContent) => {
+				// content 可能是 string 或卡片对象
+				if (typeof content === "string") {
+					return this.postMessage(chatId, content);
+				} else {
+					return this.outbound.sendCard(chatId, content);
+				}
+			},
+			updateMessage: async (messageId, content: string | CardContent) => {
+				// content 可能是 string 或卡片对象
+				if (typeof content === "string") {
+					await this.updateMessage(messageId, { type: "text", content });
+				} else {
+					const cardContent = JSON.stringify(content);
+					await this.outbound.updateMessage(messageId, cardContent);
+				}
+			},
 			deleteMessage: async (messageId) => this.deleteMessage(messageId),
 			uploadFile: async (chatId, filePath, title) => this.uploadFileToChat(chatId, filePath, title),
 			uploadImage: async (imagePath) => this.uploadImage(imagePath),
 			sendImage: async (chatId, imageKey) => this.sendImageToChat(chatId, imageKey),
 			sendVoiceMessage: async (chatId, filePath) => this.sendVoiceToChat(chatId, filePath),
 			postInThread: async (chatId, parentMessageId, text) => this.postInThread(chatId, parentMessageId, text),
+			hideThinking: this.hideThinking,
 		});
 	}
 
@@ -320,17 +344,48 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	// ========================================================================
+	// 出站功能访问器
+	// ========================================================================
+
+	getOutbound(): FeishuOutbound {
+		return this.outbound;
+	}
+
+	getReactions(): FeishuReactions {
+		return this.reactions;
+	}
+
+	getThread(): FeishuThread {
+		return this.thread;
+	}
+
+	getChatManage(): FeishuChatManage {
+		return this.chatManage;
+	}
+
+	getCards(): FeishuCards {
+		return this.cards;
+	}
+
+	// ========================================================================
 	// Private Methods
 	// ========================================================================
 
-	private buildTextCard(text: string): string {
-		return JSON.stringify(buildTextCard(text));
+	private async fetchBotInfo(): Promise<void> {
+		try {
+			const botInfo = await (this.client.im as any).bot?.get?.();
+			if (botInfo?.code === 0 && botInfo?.data?.bot_id) {
+				this.botUserId = botInfo.data.bot_id;
+				this.logger.info(`Bot user ID: ${this.botUserId}`);
+			}
+		} catch {
+			// Ignore
+		}
 	}
 
 	private async postMessage(channel: string, text: string): Promise<string> {
 		const hookManager = getHookManager();
 
-		// 发送前触发 MESSAGE_SEND hook
 		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_SEND)) {
 			await hookManager.emit(HOOK_NAMES.MESSAGE_SEND, {
 				channelId: channel,
@@ -339,82 +394,27 @@ export class FeishuAdapter implements PlatformAdapter {
 			});
 		}
 
-		// 检测是否已经是飞书卡片格式，避免双重包装
-		let content: string;
-		try {
-			const parsed = JSON.parse(text);
-			if (parsed.schema === "2.0" && parsed.body) {
-				content = text;
-			} else {
-				content = this.buildTextCard(text);
-			}
-		} catch {
-			content = this.buildTextCard(text);
-		}
+		const messageId = await this.outbound.sendCard(channel, buildTextCard(text));
 
-		const result = await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: channel,
-				msg_type: "interactive",
-				content,
-			},
-		});
-
-		const messageId = result.data?.message_id || "";
-
-		// 发送后触发 MESSAGE_SENT hook
 		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_SENT)) {
 			await hookManager.emit(HOOK_NAMES.MESSAGE_SENT, {
 				channelId: channel,
 				messageId: messageId,
 				text: text,
-				success: result.code === 0,
-				error: result.code !== 0 ? result.msg : undefined,
+				success: true,
 				timestamp: new Date(),
 			});
-		}
-
-		if (result.code !== 0) {
-			throw new Error(`Failed to post message: ${result.msg}`);
 		}
 
 		return messageId;
 	}
 
 	private async postInThread(channel: string, parentMessageId: string, text: string): Promise<string> {
-		const result = await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: channel,
-				msg_type: "text",
-				content: JSON.stringify({ text }),
-				root_id: parentMessageId,
-			},
-		} as any);
-
-		if (result.code !== 0) {
-			throw new Error(`Failed to post in thread: ${result.msg}`);
-		}
-
-		return result.data?.message_id || "";
+		return this.thread.postInThread(channel, parentMessageId, text);
 	}
 
 	private async sendImageToChat(channel: string, imageKey: string): Promise<string> {
-		const result = await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: channel,
-				msg_type: "image",
-				content: JSON.stringify({ image_key: imageKey }),
-			},
-		});
-
-		if (result.code !== 0) {
-			throw new Error(`Failed to send image: ${result.msg}`);
-		}
-
-		return result.data?.message_id || "";
+		return this.outbound.sendImage(channel, imageKey);
 	}
 
 	private async uploadFileToChat(channel: string, filePath: string, title?: string): Promise<void> {
@@ -430,47 +430,12 @@ export class FeishuAdapter implements PlatformAdapter {
 		}
 
 		const fileKey = await this.uploadFile(filePath);
-
-		await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: channel,
-				msg_type: "file",
-				content: JSON.stringify({ file_key: fileKey }),
-			},
-		});
+		await this.outbound.sendFile(channel, fileKey, fileName);
 	}
 
 	private async sendVoiceToChat(channel: string, filePath: string): Promise<string> {
-		const fileName = basename(filePath);
-		const fileContent = readFileSync(filePath);
-
-		const uploadResult = await (this.client.im.file as any).create({
-			data: {
-				file_type: "opus",
-				file_name: fileName,
-				file: fileContent,
-			},
-		});
-
-		if (!uploadResult?.file_key) {
-			throw new Error("Failed to upload audio file: no file_key returned");
-		}
-
-		const result = await this.client.im.message.create({
-			params: { receive_id_type: "chat_id" },
-			data: {
-				receive_id: channel,
-				msg_type: "audio",
-				content: JSON.stringify({ file_key: uploadResult.file_key }),
-			},
-		});
-
-		if (result.code !== 0) {
-			throw new Error(`Failed to send voice message: ${result.msg}`);
-		}
-
-		return result.data?.message_id || "";
+		const fileKey = await this.uploadFile(filePath);
+		return this.outbound.sendAudio(channel, fileKey);
 	}
 
 	private async startWebSocket(): Promise<void> {
@@ -531,49 +496,40 @@ export class FeishuAdapter implements PlatformAdapter {
 		res.json({ code: 0, msg: "success" });
 	}
 
-	private async handleMessageEvent(event: any): Promise<void> {
+	private async handleMessageEvent(event: FeishuMessageEvent): Promise<void> {
 		const message = event.message;
 		if (!message) return;
 
 		const chatId = message.chat_id;
 		const sender = event.sender;
 
-		// 跳过 bot 消息
 		if (sender?.sender_type === "app") return;
 
-		// 解析消息 - 先尝试从缓存获取用户信息，如果没有则实时获取
 		let userInfo = this.users.get(sender?.sender_id?.user_id || "");
 
-		// 如果用户不在缓存中，尝试实时获取
 		if (!userInfo && sender?.sender_id?.user_id) {
-			const fetchedInfo = await this.fetchUserInfo(sender.sender_id.user_id);
-			if (fetchedInfo) userInfo = fetchedInfo;
+			userInfo = await this.getUserInfo(sender.sender_id.user_id);
 		}
 
 		const universalMessage = parseFeishuMessage(event, userInfo);
 
-		// 跳过旧消息
 		if (this.startupTs && universalMessage.timestamp.getTime() < parseInt(this.startupTs)) {
 			this.logger.debug(`Skipping old message: ${universalMessage.content.substring(0, 30)}`);
 			return;
 		}
 
-		// 去重检查
 		if (this.processedMessages.has(universalMessage.id)) {
 			this.logger.debug(`Skipping duplicate message: ${universalMessage.id}`);
 			return;
 		}
 
-		// 记录已处理的消息 ID
 		this.processedMessages.add(universalMessage.id);
 
-		// 限制缓存大小，防止内存泄漏
 		if (this.processedMessages.size > 10000) {
 			const arr = Array.from(this.processedMessages);
 			this.processedMessages = new Set(arr.slice(-5000));
 		}
 
-		// 分发消息
 		for (const handler of this.messageHandlers) {
 			try {
 				await handler(universalMessage);
@@ -592,8 +548,6 @@ export class FeishuAdapter implements PlatformAdapter {
 					params: { page_size: 100, page_token: pageToken },
 				});
 
-				this.logger.debug(`fetchUsers response: code=${result.code}, items=${result.data?.items?.length || 0}`);
-
 				if (result.code === 0 && result.data?.items) {
 					for (const user of result.data.items) {
 						if (user.user_id) {
@@ -605,8 +559,6 @@ export class FeishuAdapter implements PlatformAdapter {
 							totalCount++;
 						}
 					}
-				} else if (result.code !== 0) {
-					this.logger.error(`fetchUsers API error: code=${result.code}, msg=${result.msg}`);
 				}
 
 				pageToken = result.data?.page_token;
@@ -615,37 +567,6 @@ export class FeishuAdapter implements PlatformAdapter {
 		} catch (err) {
 			this.logger.error("fetchUsers failed", undefined, err instanceof Error ? err : new Error(String(err)));
 		}
-	}
-
-	/**
-	 * 实时获取单个用户信息
-	 * 当用户不在缓存中时使用
-	 */
-	private async fetchUserInfo(userId: string): Promise<UserInfo | null> {
-		try {
-			const result = await this.client.contact.user.get({
-				path: { user_id: userId },
-			});
-
-			this.logger.debug(`fetchUserInfo(${userId}) response: code=${result.code}`);
-
-			if (result.code === 0 && result.data?.user) {
-				const user = result.data.user;
-				const info: UserInfo = {
-					id: user.user_id || userId,
-					userName: user.name || user.user_id || userId,
-					displayName: user.nickname || user.name || user.user_id || userId,
-				};
-				this.users.set(userId, info); // 缓存起来
-				this.logger.debug(`Fetched user info for ${userId}: ${info.displayName}`);
-				return info;
-			} else if (result.code !== 0) {
-				this.logger.error(`fetchUserInfo(${userId}) API error: code=${result.code}, msg=${result.msg}`);
-			}
-		} catch (err) {
-			this.logger.error(`fetchUserInfo(${userId}) failed`, undefined, err instanceof Error ? err : new Error(String(err)));
-		}
-		return null;
 	}
 
 	private async fetchChannels(): Promise<void> {

@@ -7,12 +7,12 @@
 import type { AdapterFactory, BotConfig, Bot } from "../../core/adapter/index.js";
 import { UnifiedBot, type UnifiedBotConfig } from "../../core/unified-bot.js";
 import { PluginManager } from "../../core/plugin/manager.js";
-import { FeishuStore } from "./store.js";
-import { FeishuAdapter, type FeishuAdapterConfig } from "./adapter.js";
+import { FeishuAdapter } from "./adapter.js";
+import type { FeishuAdapterConfig } from "./types.js";
 import type { SandboxConfig } from "../../core/sandbox/index.js";
-import { getFeishuBuiltinPlugins } from "./bot.js";
 import { PiLogger } from "../../utils/logger/index.js";
 import type { Logger } from "../../utils/logger/index.js";
+import { FeishuStore } from "./store.js";
 
 // ============================================================================
 // Types
@@ -28,10 +28,14 @@ export interface FeishuBotConfig extends BotConfig {
 	appSecret: string;
 	/** 是否使用 WebSocket */
 	useWebSocket?: boolean;
+	/** 默认模型 */
+	model?: string;
+	/** 是否隐藏思考过程（默认 false，即显示） */
+	hideThinking?: boolean;
 }
 
 // ============================================================================
-// Feishu Adapter Factory
+// Feishu V2 Adapter Factory
 // ============================================================================
 
 /**
@@ -41,8 +45,8 @@ export const feishuAdapterFactory: AdapterFactory = {
 	meta: {
 		id: "feishu",
 		name: "Feishu",
-		version: "1.0.0",
-		description: "飞书机器人适配器",
+		version: "2.0.0",
+		description: "飞书机器人适配器 - 支持完整消息收发、卡片、表情反应、线程回复",
 	},
 
 	/**
@@ -77,6 +81,8 @@ export const feishuAdapterFactory: AdapterFactory = {
 			useWebSocket: config.useWebSocket,
 			port: config.port,
 			logger: logger.child("adapter"),
+			model: config.model,
+			hideThinking: config.hideThinking,
 		} as FeishuAdapterConfig);
 
 		// 初始化适配器
@@ -85,14 +91,7 @@ export const feishuAdapterFactory: AdapterFactory = {
 			enabled: true,
 		});
 
-		// 3. 创建存储
-		const store = new FeishuStore({
-			workspaceDir: config.workspaceDir,
-			appId: config.appId,
-			appSecret: config.appSecret,
-		});
-
-		// 4. 创建插件管理器（传入 logger）
+		// 3. 创建插件管理器（传入 logger）
 		const pluginManager = new PluginManager({
 			workspaceDir: config.workspaceDir,
 			pluginsConfig: config.plugins || {},
@@ -102,9 +101,6 @@ export const feishuAdapterFactory: AdapterFactory = {
 		// 设置平台为飞书
 		pluginManager.setPlatform("feishu");
 
-		// 注册内置插件
-		pluginManager.registerAll(getFeishuBuiltinPlugins());
-
 		// 初始化插件
 		await pluginManager.initialize({
 			sandboxConfig,
@@ -112,6 +108,12 @@ export const feishuAdapterFactory: AdapterFactory = {
 		});
 
 		logger.info("Feishu bot created successfully");
+
+		// 4. 创建 Store
+		const store = new FeishuStore({
+			workspaceDir: config.workspaceDir,
+			client: (adapter as any).client,
+		});
 
 		// 5. 创建统一机器人
 		const bot = new UnifiedBot({

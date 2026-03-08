@@ -5,7 +5,7 @@
  */
 
 import type { PlatformCapabilities, CAPABILITIES } from "../../core/plugin/types.js";
-import { buildTextCard, autoBuildCard } from "./cards/index.js";
+import { buildTextCard, autoBuildCard } from "./cards.js";
 
 // ============================================================================
 // Types
