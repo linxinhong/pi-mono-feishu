@@ -189,17 +189,17 @@ export class EventsWatcher {
 		try {
 			const data = JSON.parse(content);
 
-			if (!data.type || !data.channelId || !data.text) return null;
+			if (!data.type || !data.channelId || !data.text || !data.platform) return null;
 
 			switch (data.type) {
 				case "immediate":
-					return { type: "immediate", channelId: data.channelId, text: data.text };
+					return { type: "immediate", platform: data.platform, channelId: data.channelId, text: data.text };
 				case "one-shot":
 					if (!data.at) return null;
-					return { type: "one-shot", channelId: data.channelId, text: data.text, at: data.at };
+					return { type: "one-shot", platform: data.platform, channelId: data.channelId, text: data.text, at: data.at };
 				case "periodic":
 					if (!data.schedule || !data.timezone) return null;
-					return { type: "periodic", channelId: data.channelId, text: data.text, schedule: data.schedule, timezone: data.timezone };
+					return { type: "periodic", platform: data.platform, channelId: data.channelId, text: data.text, schedule: data.schedule, timezone: data.timezone };
 				default:
 					return null;
 			}
@@ -315,10 +315,11 @@ export class EventsWatcher {
 		let success = true;
 		let error: string | undefined;
 		try {
-			await this.onEvent(event.channelId, event.text);
+			await this.onEvent(event.platform, event.channelId, event.text);
 		} catch (e) {
 			success = false;
 			error = e instanceof Error ? e.message : String(e);
+			log.logError(`[EventsWatcher] Event execution failed: ${filename}, error: ${error}`);
 		}
 
 		// 触发 event:triggered hook（通知）

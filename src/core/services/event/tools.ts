@@ -18,6 +18,7 @@ const EventCreateSchema = Type.Object({
 		description: "Event type: immediate (execute now), one-shot (execute once at specified time), periodic (repeat on schedule)",
 	}),
 	name: Type.String({ description: "Event name (used as filename, without .json)" }),
+	platform: Type.String({ description: "Platform identifier (e.g., 'feishu', 'discord')" }),
 	channelId: Type.String({ description: "Target channel ID to send message to" }),
 	text: Type.String({ description: "Instruction text for the Agent to execute when event triggers" }),
 	at: Type.Optional(Type.String({ description: "Execution time for one-shot event (ISO 8601 format, e.g., 2024-01-15T09:00:00)" })),
@@ -33,7 +34,7 @@ export function createEventCreateTool(watcher: EventsWatcher, defaultChannelId: 
 		description: "Create a scheduled event. Use 'immediate' for instant execution, 'one-shot' for single execution at a specific time, or 'periodic' for recurring events.",
 		parameters: EventCreateSchema,
 		execute: async (_toolCallId, params: EventCreateParams, _signal, _onUpdate) => {
-			const { type, name, channelId, text, at, schedule, timezone } = params;
+			const { type, name, platform, channelId, text, at, schedule, timezone } = params;
 
 			// 验证参数
 			if (type === "one-shot" && !at) {
@@ -54,12 +55,13 @@ export function createEventCreateTool(watcher: EventsWatcher, defaultChannelId: 
 			const event: ScheduledEvent = (() => {
 				switch (type) {
 					case "immediate":
-						return { type: "immediate", channelId: channelId || defaultChannelId, text };
+						return { type: "immediate", platform, channelId: channelId || defaultChannelId, text };
 					case "one-shot":
-						return { type: "one-shot", channelId: channelId || defaultChannelId, text, at: at! };
+						return { type: "one-shot", platform, channelId: channelId || defaultChannelId, text, at: at! };
 					case "periodic":
 						return {
 							type: "periodic",
+							platform,
 							channelId: channelId || defaultChannelId,
 							text,
 							schedule: schedule!,
@@ -119,13 +121,14 @@ export function createEventListTool(watcher: EventsWatcher): AgentTool<typeof Ev
 
 			// 格式化输出
 			const lines = events.map(({ name, event }) => {
+				const platform = event.platform || "unknown";
 				switch (event.type) {
 					case "immediate":
-						return `- ${name} [immediate] -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
+						return `- ${name} [immediate] (${platform}) -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
 					case "one-shot":
-						return `- ${name} [one-shot] @ ${event.at} -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
+						return `- ${name} [one-shot] (${platform}) @ ${event.at} -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
 					case "periodic":
-						return `- ${name} [periodic] "${event.schedule}" (${event.timezone}) -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
+						return `- ${name} [periodic] (${platform}) "${event.schedule}" (${event.timezone}) -> ${event.channelId}: "${event.text.substring(0, 50)}..."`;
 				}
 			});
 

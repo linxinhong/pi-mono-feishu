@@ -85,8 +85,8 @@ export class UnifiedBot {
 		const eventsDir = join(this.workingDir, "events");
 		this.eventsWatcher = new EventsWatcher({
 			eventsDir,
-			onEvent: async (channelId, text) => {
-				await this.handleScheduledEvent(channelId, text);
+			onEvent: async (platform, channelId, text) => {
+				await this.handleScheduledEvent(platform, channelId, text);
 			},
 		});
 
@@ -196,12 +196,43 @@ export class UnifiedBot {
 	/**
 	 * 处理调度事件
 	 */
-	private async handleScheduledEvent(channelId: string, text: string): Promise<void> {
+	private async handleScheduledEvent(platform: string, channelId: string, text: string): Promise<void> {
+		// 检查 platform 是否匹配当前 adapter
+		if (platform !== this.adapter.platform) {
+			console.log(`[UnifiedBot] Event platform mismatch: event=${platform}, adapter=${this.adapter.platform}, ignoring`);
+			return; // 不是当前 platform 的事件，忽略
+		}
+
+		console.log(`[UnifiedBot] Handling scheduled event: platform=${platform}, channelId=${channelId}`);
+
+		// 创建合成消息
+		const syntheticMessage: any = {
+			id: `event-${Date.now()}`,
+			chat: { id: channelId },
+			content: text,
+			sender: { id: "EVENT", name: "Event" },
+			timestamp: new Date(),
+		};
+
 		// 创建平台上下文
 		const platformContext = this.adapter.createPlatformContext(channelId);
 
-		// 发送事件消息
-		await platformContext.sendText(channelId, text);
+		// 让 Agent 处理
+		const response = await this.coreAgent.processMessage(syntheticMessage, platformContext, {
+			user: { id: "EVENT", userName: "Event", displayName: "Event" },
+			channels: await this.adapter.getAllChannels(),
+			users: await this.adapter.getAllUsers(),
+		});
+
+		// 发送响应
+		if (response) {
+			const feishuContext = platformContext as any;
+			if (feishuContext.finishStatus) {
+				await feishuContext.finishStatus(response);
+			} else {
+				await platformContext.sendText(channelId, response);
+			}
+		}
 	}
 }
 

@@ -7,6 +7,7 @@
  */
 export interface ImmediateEvent {
 	type: "immediate";
+	platform: string;
 	channelId: string;
 	text: string;
 }
@@ -16,6 +17,7 @@ export interface ImmediateEvent {
  */
 export interface OneShotEvent {
 	type: "one-shot";
+	platform: string;
 	channelId: string;
 	text: string;
 	at: string;
@@ -26,6 +28,7 @@ export interface OneShotEvent {
  */
 export interface PeriodicEvent {
 	type: "periodic";
+	platform: string;
 	channelId: string;
 	text: string;
 	schedule: string;
@@ -40,4 +43,4 @@ export type ScheduledEvent = ImmediateEvent | OneShotEvent | PeriodicEvent;
 /**
  * 事件回调函数
  */
-export type EventCallback = (channelId: string, text: string) => Promise<void>;
+export type EventCallback = (platform: string, channelId: string, text: string) => Promise<void>;
