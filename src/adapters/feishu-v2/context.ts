@@ -5,8 +5,11 @@
  */
 
 import type { PlatformContext } from "../../core/platform/context.js";
+import type { PlatformTool } from "../../core/platform/tools/index.js";
 import { buildStatusCard, autoBuildCard, buildProgressCard, buildTextCard } from "./cards.js";
 import type { CardContent } from "./types.js";
+import { FeishuToolsManager } from "./tools/index.js";
+import { createAllFeishuTools } from "./tools/agent-tools.js";
 
 // ============================================================================
 // Types
@@ -52,6 +55,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	private config: FeishuContextConfig;
 	private statusMessageId: string | null = null; // 状态消息 ID
 	private toolHistory: string[] = []; // 工具执行历史
+	private toolsCache: PlatformTool[] | null = null; // 平台工具缓存
+	private toolsManager: FeishuToolsManager | null = null; // 工具管理器缓存
 
 	constructor(config: FeishuContextConfig) {
 		this.config = config;
@@ -168,5 +173,27 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	getChatId(): string {
 		return this.config.chatId;
+	}
+
+	/**
+	 * 获取飞书平台工具
+	 *
+	 * 实现 PlatformContext.getTools 接口，提供飞书特定的 AI 工具
+	 */
+	async getTools(_context: { chatId: string; workspaceDir: string; channelDir: string }): Promise<PlatformTool[]> {
+		// 使用缓存避免重复创建
+		if (this.toolsCache) {
+			return this.toolsCache;
+		}
+
+		// 创建工具管理器（使用缓存）
+		if (!this.toolsManager) {
+			this.toolsManager = await FeishuToolsManager.create(this.config.client);
+		}
+
+		// 创建所有飞书工具
+		this.toolsCache = createAllFeishuTools(this.toolsManager.getAllTools());
+
+		return this.toolsCache;
 	}
 }

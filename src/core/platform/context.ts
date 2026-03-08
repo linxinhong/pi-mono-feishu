@@ -5,6 +5,7 @@
  */
 
 import type { UserInfo, ChannelInfo } from "./message.js";
+import type { PlatformTool } from "./tools/index.js";
 
 // Re-export for convenience
 export type { UserInfo, ChannelInfo } from "./message.js";
@@ -98,6 +99,21 @@ export interface PlatformContext {
 	 * - 微信: getPlatformFeature("templateMessage") -> 模板消息发送函数
 	 */
 	getPlatformFeature?<T = any>(feature: string): T;
+
+	/**
+	 * 获取平台特定工具（可选实现）
+	 *
+	 * 平台适配器可以实现此方法，提供平台特定的 AI 工具。
+	 * 这些工具会被 CoreAgent 加载到 AI 的 prompt 中。
+	 *
+	 * @param context Agent 上下文信息
+	 * @returns 平台工具列表
+	 */
+	getTools?(context: {
+		chatId: string;
+		workspaceDir: string;
+		channelDir: string;
+	}): PlatformTool[] | Promise<PlatformTool[]>;
 }
 
 /**

@@ -50,6 +50,20 @@ export { FeishuWikiTool, type WikiNode, type WikiSpace } from "./wiki.js";
 export { FeishuDriveTool, type DriveFile, type DriveFolder } from "./drive.js";
 
 // ============================================================================
+// Agent 工具适配器
+// ============================================================================
+
+export {
+	createFeishuTaskTools,
+	createFeishuCalendarTools,
+	createFeishuBitableTools,
+	createFeishuDocTools,
+	createFeishuWikiTools,
+	createFeishuDriveTools,
+	createAllFeishuTools,
+} from "./agent-tools.js";
+
+// ============================================================================
 // 工具管理器
 // ============================================================================
 

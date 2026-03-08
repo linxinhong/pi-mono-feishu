@@ -491,6 +491,23 @@ export class CoreAgent {
 			...(this.config.eventsWatcher ? getAllEventTools(this.config.eventsWatcher, chatId) : []),
 		].filter(Boolean);
 
+		// 添加平台特定工具
+		if (platformContext.getTools) {
+			try {
+				const platformTools = await platformContext.getTools({
+					chatId,
+					workspaceDir: workspacePath,
+					channelDir,
+				});
+				if (platformTools && platformTools.length > 0) {
+					tools.push(...platformTools);
+					log.logInfo(`[Agent] Added ${platformTools.length} platform tools for ${platformContext.platform}`);
+				}
+			} catch (error) {
+				log.logError(`[Agent] Failed to load platform tools: ${error}`);
+			}
+		}
+
 		// 验证工具不为空
 		if (tools.length === 0) {
 			throw new Error("[Agent] No tools available - cannot initialize agent");
