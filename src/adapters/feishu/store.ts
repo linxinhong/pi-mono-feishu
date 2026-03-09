@@ -1,53 +1,42 @@
 /**
- * Feishu Store
- *
- * 飞书平台存储实现
+ * Feishu 存储实现
  */
 
-import {
-	BaseStore,
-	type Attachment,
-	type AttachmentInput,
-} from "../../core/store/index.js";
+import type { BaseStore } from "../../core/store/index.js";
 
-/**
- * 飞书存储实现
- *
- * 处理飞书消息的附件下载和存储
- */
+// ============================================================================
+// FeishuStore
+// ============================================================================
+
 export class FeishuStore extends BaseStore {
-	constructor(config: { workspaceDir: string }) {
-		super({ workspaceDir: config.workspaceDir });
+	constructor(workspaceDir: string) {
+		super(workspaceDir);
+	}
+}
+
+	// 实现 BaseStore 的抽象方法
+	protected getStoreKey(prefix: string): string {
+		const key = `${feishu:${prefix}`;
+		return this.store.get(key);
 	}
 
-	/**
-	 * 处理附件
-	 *
-	 * 下载飞书消息中的附件到本地
-	 */
-	async processAttachments(
-		channelId: string,
-		files: AttachmentInput[],
-		timestamp: string
-	): Promise<Attachment[]> {
-		const attachments: Attachment[] = [];
+	set(key: string, value: any): void {
+		this.store.set(key, value);
+	}
 
-		for (const file of files) {
-			try {
-				// 飞书附件处理逻辑
-				// 这里简化处理
-				attachments.push({
-					original: file.name || file.file_key || "unknown",
-					local: "", // TODO: 实现下载逻辑
-				});
-			} catch (error) {
-				console.error(
-					`Failed to process attachment ${file.name || file.file_key}:`,
-					error
-				);
-			}
-		}
+	get(key: string): any {
+		return this.store.get(key);
+	}
 
-		return attachments;
+	delete(key: string): void {
+		this.store.delete(key);
+	}
+
+	clear(): void {
+		this.store.clear();
+	}
+
+	keys(): string[] {
+		return Array.from(this.store.keys());
 	}
 }

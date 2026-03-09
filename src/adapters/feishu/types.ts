@@ -1,138 +1,152 @@
 /**
- * Feishu Adapter Types
- *
- * 飞书适配器的类型定义
+ * Feishu Adapter 类型定义
  */
 
-import type { Logger } from "../../utils/logger/types.js";
-
 // ============================================================================
-// Feishu Adapter Configuration
+// 飞书品牌类型
 // ============================================================================
 
 /**
- * 飞书适配器配置
+ * 飞书品牌类型
  */
-export interface FeishuAdapterConfig {
-	/** 平台类型 */
-	platform: "feishu";
-	/** 是否启用 */
-	enabled: boolean;
-	/** App ID */
-	appId: string;
-	/** App Secret */
-	appSecret: string;
-	/** Encrypt Key (可选) */
-	encryptKey?: string;
-	/** Verification Token (可选) */
-	verificationToken?: string;
-	/** 品牌: feishu 或 lark */
-	brand?: "feishu" | "lark";
-	/** 连接模式: websocket 或 webhook */
-	connectionMode?: "websocket" | "webhook";
-	/** Webhook 端口 (仅 webhook 模式) */
-	webhookPort?: number;
-	/** 默认模型 */
-	defaultModel?: string;
-	/** 日志器 */
-	logger?: Logger;
-}
-
-// ============================================================================
-// Feishu Channel Data
-// ============================================================================
+export type LarkBrand = "feishu" | "lark" | string;
 
 /**
- * 飞书频道数据
- *
- * 用于发送消息时需要的上下文信息
+ * 直聊策略
  */
-export interface FeishuChannelData {
-	/** 配置对象 (传递给 feishu-openclaw-plugin) */
-	cfg: {
-		feishu: {
-			accounts: Record<string, FeishuAccountConfig>;
-		};
-	};
-	/** 账户 ID */
-	accountId: string;
-	/** 聊天 ID */
-	chatId: string;
-	/** 消息 ID (用于回复) */
-	messageId?: string;
-	/** 是否回复到话题 */
-	replyInThread?: boolean;
-}
+export type DMPolicy = "pairing" | "mention" | "all";
+
+/**
+ * 群聊策略
+ */
+export type GroupPolicy = "mention" | "all";
+
+// ============================================================================
+// 账户配置
+// ============================================================================
 
 /**
  * 飞书账户配置
  */
 export interface FeishuAccountConfig {
-	app_id: string;
-	app_secret: string;
-	encrypt_key?: string;
-	verification_token?: string;
-	brand?: "feishu" | "lark";
-}
-
-// ============================================================================
-// Tool Call Info
-// ============================================================================
-
-/**
- * 工具调用信息
- */
-export interface ToolCallInfo {
-	/** 工具名称 */
-	name: string;
-	/** 状态: running, complete, error */
-	status: "running" | "complete" | "error";
-	/** 参数 (可选) */
-	params?: Record<string, unknown>;
-	/** 结果 (可选) */
-	result?: string;
-}
-
-// ============================================================================
-// Card Types
-// ============================================================================
-
-/**
- * 卡片状态
- */
-export type CardState = "thinking" | "streaming" | "complete" | "confirm";
-
-/**
- * 卡片构建选项
- */
-export interface CardBuildOptions {
-	/** 文本内容 */
-	text?: string;
-	/** 思考过程文本 */
-	reasoningText?: string;
-	/** 思考耗时 (ms) */
-	reasoningElapsedMs?: number;
-	/** 工具调用列表 */
-	toolCalls?: ToolCallInfo[];
-	/** 总耗时 (ms) */
-	elapsedMs?: number;
-	/** 是否错误 */
-	isError?: boolean;
-	/** 是否中止 */
-	isAborted?: boolean;
-	/** 页脚配置 */
-	footer?: {
-		status?: boolean;
-		elapsed?: boolean;
+	/** 账户 ID */
+	accountId: string;
+	/** 应用 ID */
+	appId: string;
+	/** 应用密钥 */
+	appSecret: string;
+	/** 加密密钥（可选） */
+	encryptKey?: string;
+	/** 验证令牌（可选） */
+	verificationToken?: string;
+	/** 品牌：feishu 或 lark */
+	brand?: LarkBrand;
+	/** 直聊策略 */
+	dmPolicy?: DMPolicy;
+	/** 群聊策略 */
+	groupPolicy?: GroupPolicy;
+	/** 是否启用流式卡片 */
+	streaming?: boolean;
+	/** 账户名称 */
+	name?: string;
+	/** 额外配置 */
+	extra?: {
+		/** 自定义域名 */
+		domain?: string;
+		/** 自定义 HTTP headers */
+		httpHeaders?: Record<string, string>;
 	};
 }
 
+/**
+ * 飞书 Adapter 配置
+ */
+export interface FeishuAdapterConfig {
+	/** 账户列表 */
+	accounts: FeishuAccountConfig[];
+	/** 是否启用 WebSocket */
+	useWebSocket?: boolean;
+	/** 默认模型 */
+	model?: string;
+}
+
 // ============================================================================
-// Message Types
+// 消息事件类型
 // ============================================================================
 
 /**
- * 消息上下文 (从 feishu-openclaw-plugin 解析)
+ * 飞书消息事件
+ */
+export interface FeishuMessageEvent {
+	event: {
+		sender: {
+			sender_id: {
+				open_id: string;
+				user_id?: string;
+				union_id?: string;
+			};
+			sender_type?: string;
+			tenant_key?: string;
+		};
+		message: {
+			message_id: string;
+			root_id?: string;
+			parent_id?: string;
+			thread_id?: string;
+			chat_id: string;
+			chat_type: "p2p" | "group" | "topic";
+			message_type: string;
+			content: string;
+			create_time: string;
+			mentions?: Array<{
+				key: string;
+				id: {
+					open_id: string;
+					user_id?: string;
+					union_id?: string;
+				};
+				name: string;
+				tenant_key?: string;
+			}>;
+		};
+	};
+}
+
+/**
+ * 飞书卡片事件
+ */
+export interface FeishuCardEvent {
+	action?: {
+		value?: Record<string, any>;
+	};
+	context?: {
+		open_message_id?: string;
+		open_chat_id?: string;
+	};
+	open_message_id?: string;
+	open_chat_id?: string;
+}
+
+/**
+ * 提及信息
+ */
+export interface MentionInfo {
+	/** 提及 key */
+	key: string;
+	/** 用户 open_id */
+	openId: string;
+	/** 用户名称 */
+	name: string;
+	/** 是否是机器人 */
+	isBot: boolean;
+}
+
+// ============================================================================
+// 消息上下文
+// ============================================================================
+
+/**
+ * 消息上下文（解析后的消息）
  */
 export interface MessageContext {
 	/** 聊天 ID */
@@ -142,39 +156,178 @@ export interface MessageContext {
 	/** 发送者 ID */
 	senderId: string;
 	/** 聊天类型 */
-	chatType: "p2p" | "group" | "topic_group";
-	/** 根消息 ID */
+	chatType: "p2p" | "group" | "topic";
+	/** 根消息 ID（话题） */
 	rootId?: string;
 	/** 父消息 ID */
 	parentId?: string;
-	/** 话题 ID */
+	/** 线程 ID */
 	threadId?: string;
-	/** 消息内容 */
+	/** 消息内容（已转换为文本） */
 	content: string;
-	/** 内容类型 */
+	/** 原始内容类型 */
 	contentType: string;
-	/** 资源列表 */
-	resources?: Record<string, unknown>;
+	/** 资源列表（图片、文件等） */
+	resources?: Array<{
+		type: "image" | "file" | "audio" | "video";
+		fileKey: string;
+		name?: string;
+	}>;
 	/** 提及列表 */
 	mentions: MentionInfo[];
 	/** 创建时间 */
 	createTime?: number;
 	/** 原始消息 */
-	rawMessage?: unknown;
-	/** 原始发送者 */
-	rawSender?: unknown;
+	rawMessage?: any;
+	/** 原始发送者信息 */
+	rawSender?: any;
+}
+
+// ============================================================================
+// 卡片系统类型
+// ============================================================================
+
+/**
+ * 卡片状态
+ */
+export type CardState = "thinking" | "streaming" | "complete" | "confirm";
+
+/**
+ * 工具调用状态
+ */
+export interface ToolCallStatus {
+	/** 工具名称 */
+	name: string;
+	/** 状态 */
+	status: "running" | "complete" | "error";
 }
 
 /**
- * 提及信息
+ * 卡片数据
  */
-export interface MentionInfo {
-	/** 提及 key */
-	key: string;
-	/** Open ID */
-	openId: string;
-	/** 名称 */
-	name: string;
-	/** 是否是 Bot */
-	isBot: boolean;
+export interface CardData {
+	/** 文本内容 */
+	text?: string;
+	/** 工具调用列表 */
+	toolCalls?: ToolCallStatus[];
+	/** 思考文本 */
+	reasoningText?: string;
+	/** 思考耗时（毫秒） */
+	reasoningElapsedMs?: number;
+	/** 总耗时（毫秒） */
+	elapsedMs?: number;
+	/** 是否错误 */
+	isError?: boolean;
+	/** 是否中止 */
+	isAborted?: boolean;
+	/** 确认数据 */
+	confirmData?: {
+		pendingOperationId: string;
+		operationDescription: string;
+		preview?: string;
+	};
+	/** 页脚配置 */
+	footer?: {
+		status?: boolean;
+		elapsed?: boolean;
+	};
+}
+
+/**
+ * 飞书卡片内容
+ */
+export interface FeishuCard {
+	schema?: "2.0";
+	config?: {
+		wide_screen_mode?: boolean;
+		update_multi?: boolean;
+		summary?: {
+			content: string;
+		};
+	};
+	header?: {
+		title: {
+			tag: "plain_text";
+			content: string;
+		};
+		template?: string;
+	};
+	body?: {
+		elements: FeishuCardElement[];
+	};
+	elements?: FeishuCardElement[];
+}
+
+/**
+ * 飞书卡片元素
+ */
+export interface FeishuCardElement {
+	tag: string;
+	content?: string;
+	text?: {
+		tag: "lark_md" | "plain_text";
+		content: string;
+	};
+	text_size?: "notation" | "heading" | "normal";
+	[key: string]: any;
+}
+
+// ============================================================================
+// LarkClient 相关类型
+// ============================================================================
+
+/**
+ * 已配置的飞书账户
+ */
+export interface ConfiguredLarkAccount {
+	accountId: string;
+	enabled: true;
+	configured: true;
+	name?: string;
+	appId: string;
+	appSecret: string;
+	encryptKey?: string;
+	verificationToken?: string;
+	brand: LarkBrand;
+	config: Record<string, any>;
+	extra?: {
+		domain?: string;
+		httpHeaders?: Record<string, string>;
+	};
+}
+
+/**
+ * 未配置的飞书账户
+ */
+export interface UnconfiguredLarkAccount {
+	accountId: string;
+	enabled: boolean;
+	configured: false;
+	name?: string;
+	appId?: string;
+	appSecret?: string;
+	encryptKey?: string;
+	verificationToken?: string;
+	brand: LarkBrand;
+	config: Record<string, any>;
+	extra?: {
+		domain?: string;
+		httpHeaders?: Record<string, string>;
+	};
+}
+
+/**
+ * 飞书账户（联合类型）
+ */
+export type LarkAccount = ConfiguredLarkAccount | UnconfiguredLarkAccount;
+
+/**
+ * Probe 结果
+ */
+export interface ProbeResult {
+	ok: boolean;
+	appId?: string;
+	botName?: string;
+	botOpenId?: string;
+	error?: string;
 }

@@ -1,302 +1,288 @@
 /**
- * Feishu Adapter
- *
- * 飞书平台适配器 - 实现 PlatformAdapter 接口
- * 复用 @larksuiteoapi/feishu-openclaw-plugin 的核心功能
+ * Feishu 平台适配器
  */
 
-import {
-	sendTextLark,
-	sendCardLark,
-	sendImageLark,
-	updateCardFeishu,
-	probeFeishu,
-} from "@larksuiteoapi/feishu-openclaw-plugin";
+import type { PlatformAdapter } from "../../core/platform/adapter.js";
 import type {
-	PlatformAdapter,
-	PlatformConfig,
 	UniversalMessage,
 	UniversalResponse,
 	UserInfo,
 	ChannelInfo,
-} from "../../core/platform/adapter.js";
+} from "../../core/platform/message.js";
 import type { PlatformContext } from "../../core/platform/context.js";
+import type {
+	FeishuAdapterConfig,
+	FeishuAccountConfig,
+	FeishuMessageEvent,
+	MessageContext,
+} from "./types.js";
+import { LarkClient } from "./client/lark-client.js";
+import { getLarkAccount, getEnabledLarkAccounts } from "./client/accounts.js";
+import { MessageHandler, createMessageHandler } from "./messaging/inbound/handler.js";
+import { FeishuMonitor, createFeishuMonitor } from "./channel/monitor.js";
+import {
+	sendMessage,
+	sendCard,
+	updateCard,
+	sendImage,
+	uploadImage,
+	buildMarkdownCard,
+} from "./messaging/outbound/send.js";
+import { StreamingCardManager } from "./messaging/outbound/card.js";
 import { FeishuPlatformContext } from "./context.js";
-import type { FeishuAdapterConfig, MentionInfo } from "./types.js";
-import type { Logger } from "../../utils/logger/types.js";
 
 // ============================================================================
-// Feishu Adapter
+// FeishuAdapter
 // ============================================================================
 
-/**
- * 飞书平台适配器
- *
- * 实现 PlatformAdapter 接口，将飞书消息转换为 UniversalMessage
- */
 export class FeishuAdapter implements PlatformAdapter {
-	readonly platform = "feishu" as const;
+	readonly platform = "feishu";
 
-	private config: FeishuAdapterConfig;
-	private logger?: Logger;
-	private messageHandlers: Array<(message: UniversalMessage) => void> = [];
-	private runningChannels = new Map<string, { abort: () => void }>();
-	private defaultModel: string | undefined;
-	private botOpenId: string | null = null;
+	private config!: FeishuAdapterConfig;
+	private clients: Map<string, LarkClient> = new Map();
+	private messageHandlers: Map<string, MessageHandler> = new Map();
+	private monitors: Map<string, FeishuMonitor> = new Map();
+	private cardManagers: Map<string, StreamingCardManager> = new Map();
+	private abortController?: AbortController;
+	private messageCallback?: (message: UniversalMessage) => void;
+	private runningChannels: Map<string, () => void> = new Map();
 
-	constructor(config: FeishuAdapterConfig) {
-		this.config = config;
-		this.logger = config.logger;
-		this.defaultModel = config.defaultModel;
-	}
-
-	// ========================================================================
-	// PlatformAdapter Implementation
-	// ========================================================================
-
-	async initialize(config: PlatformConfig): Promise<void> {
-		// 合并配置
-		this.config = {
-			...this.config,
-			...config,
-		} as FeishuAdapterConfig;
-
-		this.logger?.info("FeishuAdapter initialized", {
-			appId: this.config.appId ? "***" : "(not set)",
-			brand: this.config.brand || "feishu",
-		});
+	async initialize(config: Record<string, any>): Promise<void> {
+		this.config = config as FeishuAdapterConfig;
 	}
 
 	async start(): Promise<void> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("Feishu appId and appSecret are required");
+		const accounts = getEnabledLarkAccounts(this.config);
+		if (accounts.length === 0) {
+			console.warn("[FeishuAdapter] No enabled accounts found");
+			return;
 		}
 
-		this.logger?.info("Starting FeishuAdapter...");
+		this.abortController = new AbortController();
 
-		// 探测连接获取 bot open_id
-		const cfg = this.buildPluginConfig();
-		const probeResult = await probeFeishu(cfg);
+		for (const account of accounts) {
+			await this.startAccount(account);
+		}
+	}
+
+	private async startAccount(account: FeishuAccountConfig): Promise<void> {
+		const larkAccount = getLarkAccount(this.config, account.accountId);
+		const client = LarkClient.fromAccount(larkAccount);
+
+		// 探测 Bot 身份
+		const probeResult = await client.probe();
 		if (!probeResult.ok) {
-			throw new Error(`Feishu connection probe failed: ${probeResult.error}`);
+			console.error(
+				`[FeishuAdapter] Failed to probe bot identity for ${account.accountId}: ${probeResult.error}`
+			);
+			return;
 		}
 
-		this.botOpenId = probeResult.botOpenId || null;
+		console.log(
+			`[FeishuAdapter] Bot identity: ${probeResult.botName} (${probeResult.botOpenId})`
+		);
 
-		this.logger?.info("FeishuAdapter connected", {
-			botName: probeResult.botName,
-			botOpenId: this.botOpenId ? "***" : "(not set)",
+		this.clients.set(account.accountId, client);
+
+		// 创建消息处理器
+		const handler = createMessageHandler({
+			botOpenId: client.botOpenId,
+			dmPolicy: account.dmPolicy,
+			groupPolicy: account.groupPolicy,
+		});
+		this.messageHandlers.set(account.accountId, handler);
+
+		// 创建并启动监控器
+		const monitor = createFeishuMonitor({
+			client,
+			abortSignal: this.abortController?.signal,
+			callbacks: {
+				onMessage: async (event: FeishuMessageEvent) => {
+					await this.handleMessage(account.accountId, event);
+				},
+				onConnectionChange: (connected: boolean) => {
+					console.log(
+						`[FeishuAdapter] Account ${account.accountId} connection: ${connected ? "connected" : "disconnected"}`
+					);
+				},
+				onError: (error: Error) => {
+					console.error(
+						`[FeishuAdapter] Account ${account.accountId} error:`,
+						error
+					);
+				},
+			},
 		});
 
-		// 注意：WebSocket 监听由 feishu-openclaw-plugin 的 monitorFeishuProvider 负责
-		// 这里我们只做初始化，实际的消息监听在 UnifiedBot 层处理
+		this.monitors.set(account.accountId, monitor);
+		await monitor.start();
+	}
+
+	private async handleMessage(
+		accountId: string,
+		event: FeishuMessageEvent
+	): Promise<void> {
+		const handler = this.messageHandlers.get(accountId);
+		if (!handler) return;
+
+		await handler.handle(event, async (message: UniversalMessage) => {
+			if (this.messageCallback) {
+				this.messageCallback(message);
+			}
+		});
 	}
 
 	async stop(): Promise<void> {
-		this.logger?.info("Stopping FeishuAdapter...");
-		// 清理运行中的频道
-		for (const [channelId, { abort }] of this.runningChannels) {
-			abort();
-			this.runningChannels.delete(channelId);
+		this.abortController?.abort();
+
+		for (const monitor of this.monitors.values()) {
+			monitor.stop();
 		}
-		this.logger?.info("FeishuAdapter stopped");
+		this.monitors.clear();
+
+		for (const client of this.clients.values()) {
+			client.disconnect();
+		}
+		this.clients.clear();
+
+		for (const handler of this.messageHandlers.values()) {
+			handler.dispose();
+		}
+		this.messageHandlers.clear();
+
+		this.runningChannels.clear();
 	}
 
 	async sendMessage(response: UniversalResponse): Promise<void> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
-		}
-
-		const cfg = this.buildPluginConfig();
-		const to = response.messageId || "";
-
-		if (response.type === "text") {
-			await sendTextLark({
-				cfg,
-				to,
-				text: response.content as string,
-			});
-		} else if (response.type === "card") {
-			await sendCardLark({
-				cfg,
-				to,
-				card: response.content as unknown as Record<string, unknown>,
-			});
-		} else if (response.type === "image" && response.imageKey) {
-			await sendImageLark({
-				cfg,
-				to,
-				imageKey: response.imageKey,
-			});
-		} else {
-			throw new Error(`Unsupported response type: ${response.type}`);
-		}
-	}
-
-	/**
-	 * 发送消息到指定聊天
-	 */
-	async sendMessageToChat(chatId: string, response: UniversalResponse): Promise<string> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
-		}
-
-		const cfg = this.buildPluginConfig();
-
-		if (response.type === "text") {
-			const result = await sendTextLark({
-				cfg,
-				to: chatId,
-				text: response.content as string,
-			});
-			return result.messageId;
-		} else if (response.type === "card") {
-			const result = await sendCardLark({
-				cfg,
-				to: chatId,
-				card: response.content as unknown as Record<string, unknown>,
-			});
-			return result.messageId;
-		} else if (response.type === "image" && response.imageKey) {
-			const result = await sendImageLark({
-				cfg,
-				to: chatId,
-				imageKey: response.imageKey,
-			});
-			return result.messageId;
-		} else {
-			throw new Error(`Unsupported response type: ${response.type}`);
-		}
-	}
-
-	async updateMessage(
-		messageId: string,
-		response: UniversalResponse
-	): Promise<void> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
-		}
+		const client = this.getFirstClient();
+		if (!client) return;
 
 		if (response.type === "card") {
-			const cfg = this.buildPluginConfig();
-			await updateCardFeishu({
-				cfg,
-				messageId,
-				card: response.content as unknown as Record<string, unknown>,
+			await sendCard(client, {
+				to: response.messageId || "",
+				card: response.content as any,
+			});
+		} else if (response.type === "image" && response.imageKey) {
+			await sendImage(client, {
+				to: response.messageId || "",
+				imageKey: response.imageKey,
 			});
 		} else {
-			throw new Error(`Cannot update message of type: ${response.type}`);
+			await sendMessage(client, {
+				to: response.messageId || "",
+				text: response.content as string,
+			});
+		}
+	}
+
+	async updateMessage(messageId: string, response: UniversalResponse): Promise<void> {
+		const client = this.getFirstClient();
+		if (!client) return;
+
+		if (response.type === "card") {
+			await updateCard(client, {
+				messageId,
+				card: response.content as any,
+			});
+		} else {
+			// 文本消息更新
+			const card = buildMarkdownCard(response.content as string);
+			await updateCard(client, {
+				messageId,
+				card,
+			});
 		}
 	}
 
 	async deleteMessage(messageId: string): Promise<void> {
-		// 飞书不支持删除消息，只能撤回
-		this.logger?.warn(`Delete message not supported in Feishu: ${messageId}`);
+		const client = this.getFirstClient();
+		if (!client) return;
+
+		await client.sdk.im.message.delete({
+			path: { message_id: messageId },
+		});
 	}
 
 	async uploadFile(filePath: string): Promise<string> {
-		// TODO: 实现
-		throw new Error("uploadFile not implemented yet");
+		const client = this.getFirstClient();
+		if (!client) throw new Error("No LarkClient available");
+
+		const { uploadFile } = await import("./messaging/outbound/send.js");
+		return uploadFile(client, filePath);
 	}
 
 	async uploadImage(imagePath: string): Promise<string> {
-		// TODO: 实现
-		throw new Error("uploadImage not implemented yet");
+		const client = this.getFirstClient();
+		if (!client) throw new Error("No LarkClient available");
+
+		return uploadImage(client, imagePath);
 	}
 
 	async getUserInfo(userId: string): Promise<UserInfo | undefined> {
-		// TODO: 通过 API 获取用户信息
-		return {
-			id: userId,
-			userName: userId,
-			displayName: userId,
-		};
+		const client = this.getFirstClient();
+		if (!client) return undefined;
+
+		try {
+			const response = await client.sdk.contact.user.batchGet({
+				data: {
+					user_id_type: "open_id",
+					user_ids: [userId],
+				},
+			});
+
+			const user = response?.data?.items?.[0];
+			if (!user) return undefined;
+
+			return {
+				id: user.open_id ?? userId,
+				userName: user.name ?? userId,
+				displayName: user.name ?? userId,
+				avatar: user.avatar?.avatar_origin ?? undefined,
+			};
+		} catch {
+			return undefined;
+		}
 	}
 
 	async getAllUsers(): Promise<UserInfo[]> {
-		// 飞书不支持批量获取用户
+		// 飞书 API 需要分页，这里简化处理
 		return [];
 	}
 
 	async getChannelInfo(channelId: string): Promise<ChannelInfo | undefined> {
-		return {
-			id: channelId,
-			name: channelId,
-		};
+		const client = this.getFirstClient();
+		if (!client) return undefined;
+
+		try {
+			const response = await client.sdk.im.chat.get({
+				path: { chat_id: channelId },
+			});
+
+			return {
+				id: channelId,
+				name: response?.data?.name ?? channelId,
+			};
+		} catch {
+			return undefined;
+		}
 	}
 
 	async getAllChannels(): Promise<ChannelInfo[]> {
-		// 飞书不支持批量获取频道
+		// 需要分页处理，简化返回
 		return [];
 	}
 
 	onMessage(handler: (message: UniversalMessage) => void): void {
-		this.messageHandlers.push(handler);
-	}
-
-	/**
-	 * 处理飞书消息事件
-	 *
-	 * 由外部调用者（如 monitorFeishuProvider）调用
-	 */
-	async handleFeishuMessage(event: unknown, botOpenId: string): Promise<void> {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const evt = event as any;
-		if (!evt?.message) {
-			return;
-		}
-
-		// 动态导入 parseMessageEvent 和 mentionedBot
-		const { parseMessageEvent, mentionedBot } = await import("@larksuiteoapi/feishu-openclaw-plugin");
-
-		// 解析消息事件
-		const messageContext = await parseMessageEvent(evt, botOpenId);
-
-		// 检查是否提及了机器人
-		const isMentioned = mentionedBot(messageContext);
-		if (!isMentioned && messageContext.chatType !== "p2p") {
-			// 群聊中未提及机器人，忽略
-			return;
-		}
-
-		// 转换为 UniversalMessage
-		const universalMessage: UniversalMessage = {
-			id: messageContext.messageId,
-			platform: "feishu",
-			type: this.convertMessageType(messageContext.contentType),
-			content: messageContext.content,
-			sender: {
-				id: messageContext.senderId,
-				name: messageContext.senderId,
-			},
-			chat: {
-				id: messageContext.chatId,
-				type: this.convertChatType(messageContext.chatType),
-			},
-			timestamp: messageContext.createTime
-				? new Date(messageContext.createTime)
-				: new Date(),
-			mentions: messageContext.mentions
-				.filter((m: MentionInfo) => !m.isBot)
-				.map((m: MentionInfo) => m.openId),
-		};
-
-		// 触发消息处理器
-		for (const handler of this.messageHandlers) {
-			try {
-				handler(universalMessage);
-			} catch (error) {
-				this.logger?.error(
-					"Message handler error",
-					undefined,
-					error as Error
-				);
-			}
-		}
+		this.messageCallback = handler;
 	}
 
 	createPlatformContext(chatId: string): PlatformContext {
-		return new FeishuPlatformContext(chatId, this);
+		const client = this.getFirstClient();
+		return new FeishuPlatformContext({
+			client,
+			chatId,
+			adapter: this,
+		});
 	}
 
 	isRunning(channelId: string): boolean {
@@ -304,7 +290,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	setRunning(channelId: string, abort: () => void): void {
-		this.runningChannels.set(channelId, { abort });
+		this.runningChannels.set(channelId, abort);
 	}
 
 	clearRunning(channelId: string): void {
@@ -312,141 +298,44 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	abortChannel(channelId: string): void {
-		const running = this.runningChannels.get(channelId);
-		if (running) {
-			running.abort();
+		const abort = this.runningChannels.get(channelId);
+		if (abort) {
+			abort();
 			this.runningChannels.delete(channelId);
 		}
 	}
 
 	getDefaultModel(): string | undefined {
-		return this.defaultModel;
+		return this.config.model;
 	}
 
-	// ========================================================================
-	// Feishu-specific Methods
-	// ========================================================================
+	// ============================================================================
+	// 公共方法（供 PlatformContext 使用）
+	// ============================================================================
 
 	/**
-	 * 发送卡片消息
+	 * 获取或创建卡片管理器
 	 */
-	async sendCard(
-		chatId: string,
-		card: Record<string, unknown>
-	): Promise<{ messageId: string }> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
+	getCardManager(chatId: string): StreamingCardManager {
+		let manager = this.cardManagers.get(chatId);
+		if (!manager) {
+			manager = new StreamingCardManager();
+			this.cardManagers.set(chatId, manager);
 		}
-
-		const cfg = this.buildPluginConfig();
-		const result = await sendCardLark({
-			cfg,
-			to: chatId,
-			card,
-		});
-		return { messageId: result.messageId };
+		return manager;
 	}
 
 	/**
-	 * 更新卡片消息
+	 * 获取第一个可用的客户端
 	 */
-	async updateCard(
-		messageId: string,
-		card: Record<string, unknown>
-	): Promise<void> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
-		}
-
-		const cfg = this.buildPluginConfig();
-		await updateCardFeishu({ cfg, messageId, card });
+	private getFirstClient(): LarkClient | undefined {
+		return this.clients.values().next().value;
 	}
 
 	/**
-	 * 发送文本消息
+	 * 根据 chatId 获取客户端（简化： 返回第一个）
 	 */
-	async sendText(chatId: string, text: string): Promise<{ messageId: string }> {
-		if (!this.config.appId || !this.config.appSecret) {
-			throw new Error("FeishuAdapter not initialized");
-		}
-
-		const cfg = this.buildPluginConfig();
-		const result = await sendTextLark({
-			cfg,
-			to: chatId,
-			text,
-		});
-		return { messageId: result.messageId };
-	}
-
-	/**
-	 * 获取配置
-	 */
-	getConfig(): FeishuAdapterConfig {
-		return this.config;
-	}
-
-	/**
-	 * 获取 Bot Open ID
-	 */
-	getBotOpenId(): string | null {
-		return this.botOpenId;
-	}
-
-	/**
-	 * 构建插件配置
-	 */
-	private buildPluginConfig(): Record<string, unknown> {
-		return {
-			feishu: {
-				accounts: {
-					default: {
-						app_id: this.config.appId,
-						app_secret: this.config.appSecret,
-						encrypt_key: this.config.encryptKey,
-						verification_token: this.config.verificationToken,
-						brand: this.config.brand || "feishu",
-					},
-				},
-			},
-		};
-	}
-
-	/**
-	 * 转换消息类型
-	 */
-	private convertMessageType(contentType: string): UniversalMessage["type"] {
-		switch (contentType) {
-			case "text":
-				return "text";
-			case "image":
-				return "image";
-			case "audio":
-				return "audio";
-			case "video":
-				return "video";
-			case "file":
-			case "media":
-				return "file";
-			default:
-				return "text";
-		}
-	}
-
-	/**
-	 * 转换聊天类型
-	 */
-	private convertChatType(
-		chatType: string
-	): UniversalMessage["chat"]["type"] {
-		switch (chatType) {
-			case "p2p":
-				return "private";
-			case "group":
-			case "topic_group":
-				return "group";
-			default:
-				return "private";
-		}
+	getClient(chatId: string): LarkClient | undefined {
+		return this.getFirstClient();
 	}
 }
