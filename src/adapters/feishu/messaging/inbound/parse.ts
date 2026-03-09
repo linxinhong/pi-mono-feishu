@@ -9,7 +9,6 @@ import type {
 	MessageContext,
 	MentionInfo,
 } from "../../types.js";
-import { LarkClient } from "../../client/lark-client.js";
 
 // ============================================================================
 // 辅助函数
@@ -60,27 +59,11 @@ function extractTextContent(content: string, messageType: string): string {
 		return extractCardText(parsed);
 	}
 
-	if (messageType === "image") {
-		return "[图片]";
-	}
-
-	if (messageType === "audio") {
-		return "[语音]";
-	}
-
-	if (messageType === "file") {
-		return "[文件]";
-	}
-
-	if (messageType === "video") {
-		return "[视频]";
-	}
-
 	return content;
 }
 
 /**
- * 从卡片内容提取文本
+ * 从卡片中提取文本
  */
 function extractCardText(card: any): string {
 	if (!card) return "[卡片]";
@@ -100,24 +83,21 @@ function extractCardText(card: any): string {
 /**
  * 从消息内容中提取资源
  */
-function extractResources(
-	content: string,
-	messageType: string
-): MessageContext["resources"] {
+function extractResources(content: string, messageType: string): MessageContext["resources"] {
 	if (messageType === "image") {
 		const parsed = safeParseJSON(content);
-		const fileKey = parsed?.file_key ?? "";
-		if (fileKey) {
-			return [{ type: "image", fileKey }];
+		const imageKey = parsed?.image_key ?? "";
+		if (imageKey) {
+			return [{ type: "image" as const, fileKey: imageKey }];
 		}
 	}
 
 	if (messageType === "file") {
 		const parsed = safeParseJSON(content);
 		const fileKey = parsed?.file_key ?? "";
-		const name = parsed?.file_name ?? "";
+		const fileName = parsed?.file_name ?? "";
 		if (fileKey) {
-			return [{ type: "file", fileKey, name }];
+			return [{ type: "file" as const, fileKey: fileKey, name: fileName }];
 		}
 	}
 
@@ -125,7 +105,7 @@ function extractResources(
 		const parsed = safeParseJSON(content);
 		const fileKey = parsed?.file_key ?? "";
 		if (fileKey) {
-			return [{ type: "audio", fileKey }];
+			return [{ type: "audio" as const, fileKey: fileKey }];
 		}
 	}
 
@@ -133,7 +113,7 @@ function extractResources(
 		const parsed = safeParseJSON(content);
 		const fileKey = parsed?.file_key ?? "";
 		if (fileKey) {
-			return [{ type: "video", fileKey }];
+			return [{ type: "video" as const, fileKey: fileKey }];
 		}
 	}
 
@@ -152,17 +132,21 @@ export async function parseMessageEvent(
 	botOpenId?: string
 ): Promise<MessageContext> {
 	// 1. 构建 MentionInfo 列表
+	const mentionMap = new Map<string, MentionInfo>();
 	const mentionList: MentionInfo[] = [];
+
 	for (const m of event.message.mentions ?? []) {
 		const openId = m.id?.open_id ?? "";
 		if (!openId) continue;
 
-		mentionList.push({
+		const info: MentionInfo = {
 			key: m.key,
 			openId,
 			name: m.name,
 			isBot: Boolean(botOpenId && openId === botOpenId),
-		});
+		};
+		mentionMap.set(m.key, info);
+		mentionList.push(info);
 	}
 
 	// 2. 提取消息内容

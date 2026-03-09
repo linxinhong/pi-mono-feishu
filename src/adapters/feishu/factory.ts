@@ -26,15 +26,13 @@ export async function createFeishuBot(config: BotConfig): Promise<Bot> {
 		...feishuConfig,
 	});
 
-    // 创建 UnifiedBot
-    const bot = new UnifiedBot({
-        adapter,
-        store: new FeishuStore(config.workspaceDir || ""),
-    });
+	// 创建 UnifiedBot
+	const bot = new UnifiedBot({
+		adapter,
+		store: new FeishuStore(config.workspaceDir || ""),
+	});
 
-    return bot;
-}
-
+	return bot;
 }
 
 // ============================================================================
@@ -45,18 +43,16 @@ export async function createFeishuBot(config: BotConfig): Promise<Bot> {
  * 自注册到 adapter registry
  */
 const factory: AdapterFactory = {
-    meta: {
-        id: "feishu",
-        name: "Feishu Adapter",
-        version: "1.0.0",
-        description: "Feishu/Lark platform adapter for pi-claw",
-    },
+	meta: {
+		id: "feishu",
+		name: "Feishu Adapter",
+		version: "1.0.0",
+		description: "Feishu/Lark platform adapter for pi-claw",
+	},
 
-    async createBot(config: BotConfig): Promise<Bot> {
-        return createFeishuBot(config);
-    },
-};
-
+	async createBot(config: BotConfig): Promise<Bot> {
+		return createFeishuBot(config);
+	},
 };
 
 // 注册

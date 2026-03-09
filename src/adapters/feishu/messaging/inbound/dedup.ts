@@ -34,22 +34,23 @@ interface Entry {
 /**
  * 创建消息去重器
  */
-export function createMessageDeduplicator(
-	maxSize = DEFAULT_MAX_SIZE,
-	ttlMs = DEFAULT_TTL_MS
+export function createMessageDedup(
+	maxSize: number = DEFAULT_MAX_SIZE,
+	ttlMs: number = DEFAULT_TTL_MS
 ): MessageDeduplicator {
-	const entries: Entry[] = new Map<string, number>();
+	const entries = new Map<string, number>();
 	const orderedIds: string[] = [];
 
 	function cleanup(): void {
-		const now = Date.now();
-		const cutoff = now - ttlMs;
+		if (orderedIds.length === 0) return;
+
+		const cutoff = Date.now() - ttlMs;
 
 		// 移除过期条目
 		while (orderedIds.length > 0) {
 			const oldest = orderedIds[0];
 			const timestamp = entries.get(oldest);
-			if (timestamp && timestamp < cutoff) {
+			if (timestamp !== undefined && timestamp < cutoff) {
 				entries.delete(oldest);
 				orderedIds.shift();
 			} else {
@@ -95,23 +96,19 @@ export function createMessageDeduplicator(
 	};
 }
 
-// ============================================================================
-// 带过期清理的去重器
-// ============================================================================
-
 /**
- * 可自动清理的消息去重器
+ * 简单消息去重（带自动清理)
  */
-export class AutoCleaningDeduplicator implements MessageDeduplicator {
+export class SimpleMessageDedup implements MessageDeduplicator {
 	private dedup: MessageDeduplicator;
 	private cleanupInterval?: ReturnType<typeof setInterval>;
 
 	constructor(
-		maxSize = DEFAULT_MAX_SIZE,
-		ttlMs = DEFAULT_TTL_MS,
-		autoCleanupIntervalMs = 60 * 1000 // 每分钟清理一次
+		maxSize: number = DEFAULT_MAX_SIZE,
+		ttlMs: number = DEFAULT_TTL_MS,
+		autoCleanupIntervalMs: number = 60000 // 1分钟自动清理
 	) {
-		this.dedup = createMessageDeduplicator(maxSize, ttlMs);
+		this.dedup = createMessageDedup(maxSize, ttlMs);
 
 		if (autoCleanupIntervalMs > 0) {
 			this.cleanupInterval = setInterval(() => {
