@@ -40,6 +40,8 @@ export interface BotConfig {
 	workspaceDir: string;
 	/** 插件配置 */
 	plugins?: Record<string, any>;
+	/** 插件管理器（由 main.ts 创建并传入） */
+	pluginManager?: PluginManager;
 	/** Sandbox 配置 */
 	sandbox?: SandboxConfig;
 	/** 端口号 */

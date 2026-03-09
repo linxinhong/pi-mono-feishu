@@ -19,6 +19,9 @@ import { createGlobalLogger, PiLogger } from "./utils/logger/index.js";
 import type { LogConfig } from "./utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
 import { ConfigManager } from "./core/config/manager.js";
+import { PluginManager } from "./core/plugin/manager.js";
+import { debugPlugin } from "./plugins/debug/index.js";
+import { voicePlugin } from "./plugins/voice/index.js";
 
 // 重新导出主要入口函数和类型（供外部使用）
 export type { SandboxConfig } from "./core/sandbox/index.js";
@@ -117,7 +120,28 @@ export async function main(options: MainOptions = {}): Promise<void> {
 		log.logWarning("No platform configured. Running in standalone mode (events and plugins only).");
 	}
 
-	// 3. 触发 system:before-start hook（bot 创建前）
+	// 3. 创建并初始化 PluginManager
+	const pluginManager = new PluginManager({
+		workspaceDir: config.workspaceDir!,
+		pluginsConfig: (config.plugins as Record<string, any>) || {},
+		logger: globalLogger.child("plugin"),
+	});
+
+	// 设置 HookManager
+	pluginManager.setHookManager(hookManager);
+
+	// 注册插件
+	pluginManager.registerAll([debugPlugin, voicePlugin]);
+
+	// 设置平台（如果有配置的平台，使用第一个平台）
+	if (platforms.length > 0) {
+		pluginManager.setPlatform(platforms[0]);
+	}
+
+	// 初始化插件（在 system:before-start 之前，让 debug 插件能记录所有事件）
+	await pluginManager.initialize();
+
+	// 4. 触发 system:before-start hook（bot 创建前）
 	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_BEFORE_START)) {
 		await hookManager.emit(HOOK_NAMES.SYSTEM_BEFORE_START, {
 			timestamp: new Date(),
@@ -126,7 +150,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 		});
 	}
 
-	// 4. 为每个平台创建并启动 bot
+	// 5. 为每个平台创建并启动 bot
 	const bots: Bot[] = [];
 
 	for (const platform of platforms) {
@@ -141,6 +165,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 		const botConfig: BotConfig = {
 			workspaceDir: config.workspaceDir!,
 			plugins: config.plugins,
+			pluginManager, // 传递 PluginManager 实例
 			sandbox: sandboxConfig,
 			port: port,
 			logging: logConfig, // 传递日志配置给工厂
