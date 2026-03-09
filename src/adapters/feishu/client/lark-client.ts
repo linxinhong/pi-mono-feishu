@@ -4,7 +4,7 @@
  * 封装 @larksuiteoapi/node-sdk，提供统一的客户端管理
  */
 
-import { Client, Domain, AppType } from "@larksuiteoapi/node-sdk";
+import * as Lark from "@larksuiteoapi/node-sdk";
 import type { FeishuConfig, BotIdentity, FeishuUserInfo, FeishuChatInfo, FeishuSendResult } from "../types.js";
 import { MessageDedup } from "./message-dedup.js";
 import { PiLogger } from "../../../utils/logger/index.js";
@@ -37,13 +37,15 @@ export interface WebSocketOptions {
  * 飞书 SDK 客户端封装
  */
 export class LarkClient {
-	private client: Client;
+	private client: Lark.Client;
+	private wsClient?: Lark.WSClient;
 	private config: LarkClientConfig;
 	private logger?: PiLogger;
 	private botIdentity: BotIdentity | null = null;
 	private messageDedup: MessageDedup;
 	private wsConnected = false;
 	private wsListeners: Map<string, Set<Function>> = new Map();
+	private domain: Lark.Domain;
 
 	constructor(config: LarkClientConfig) {
 		this.config = config;
@@ -51,14 +53,14 @@ export class LarkClient {
 
 		// 确定域名
 		const domainStr = config.domain || "feishu";
-		const domain = domainStr === "feishu" ? Domain.Feishu : domainStr === "lark" ? Domain.Lark : Domain.Feishu;
+		this.domain = domainStr === "feishu" ? Lark.Domain.Feishu : domainStr === "lark" ? Lark.Domain.Lark : Lark.Domain.Feishu;
 
 		// 创建 SDK 客户端
-		this.client = new Client({
+		this.client = new Lark.Client({
 			appId: config.appId,
 			appSecret: config.appSecret,
-			appType: AppType.SelfBuild,
-			domain,
+			appType: Lark.AppType.SelfBuild,
+			domain: this.domain,
 		});
 
 		// 创建消息去重器
@@ -94,17 +96,31 @@ export class LarkClient {
 			this.on("error", options.onError);
 		}
 
-		// 启动 WebSocket（SDK 内置）
 		try {
-			// 飞书 SDK 使用事件订阅方式
-			// 注意：SDK 的 WebSocket 功能可能需要额外配置
-			// 这里使用简化的事件监听方式
+			// 创建 EventDispatcher 并注册事件处理器
+			const eventDispatcher = new Lark.EventDispatcher({}).register({
+				"im.message.receive_v1": async (data) => {
+					this.logger?.debug("Received message event", data);
+					await this.handleReceivedEvent(data);
+				},
+			});
+
+			// 创建 WSClient 实例
+			this.wsClient = new Lark.WSClient({
+				appId: this.config.appId,
+				appSecret: this.config.appSecret,
+				domain: this.domain,
+				loggerLevel: Lark.LoggerLevel.info,
+			});
+
+			// 启动真正的 WebSocket 连接
+			await this.wsClient.start({
+				eventDispatcher: eventDispatcher,
+			});
+
 			this.wsConnected = true;
 			this.emit("connect");
-			this.logger?.info("WebSocket connected (simulated)");
-
-			// 实际的 WebSocket 事件监听需要通过 SDK 的 event 模块
-			// 这里暂时模拟连接状态
+			this.logger?.info("WebSocket connected");
 		} catch (error) {
 			this.logger?.error("Failed to start WebSocket", undefined, error as Error);
 			this.emit("error", error as Error);
@@ -117,6 +133,7 @@ export class LarkClient {
 	 */
 	disconnect(): void {
 		if (this.wsConnected) {
+			this.wsClient?.close();
 			this.wsConnected = false;
 			this.emit("disconnect");
 			this.logger?.info("WebSocket disconnected");
@@ -160,7 +177,7 @@ export class LarkClient {
 	/**
 	 * 处理接收到的消息事件
 	 */
-	handleReceivedEvent(event: any): void {
+	async handleReceivedEvent(event: any): Promise<void> {
 		try {
 			// 检查消息去重
 			const messageId = event?.event?.message?.message_id || event?.message?.message_id;
@@ -630,7 +647,7 @@ export class LarkClient {
 	// ========================================================================
 
 	/** 获取 SDK 客户端 */
-	get sdk(): Client {
+	get sdk(): Lark.Client {
 		return this.client;
 	}
 
