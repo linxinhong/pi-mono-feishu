@@ -157,7 +157,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	// 5. 启动所有 bot（并行）
 	await Promise.all(bots.map((bot) => bot.start(port)));
 
-	log.logConnected();
+	log.logConnected(platforms);
 
 	// 6. 触发 system:ready hook（所有 bot 启动后）
 	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_READY)) {

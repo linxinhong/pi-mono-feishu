@@ -60,7 +60,7 @@ export function registerStartCommand(program: Command): void {
 				const bot = await factory.createBot(botConfig);
 				await bot.start(config.port!);
 
-				log.logConnected();
+				log.logConnected(["feishu"]);
 			} catch (error: any) {
 				console.error(`[pi-claw] Error: ${error.message}`);
 				process.exit(1);

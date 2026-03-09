@@ -5,7 +5,7 @@
  */
 
 import { readdirSync, existsSync } from "fs";
-import { join, basename } from "path";
+import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 import { adapterRegistry } from "./registry.js";
 import type { AppConfig } from "../../utils/config.js";
@@ -14,8 +14,14 @@ import type { AppConfig } from "../../utils/config.js";
 // Constants
 // ============================================================================
 
-/** Adapters 目录路径 */
-const ADAPTERS_DIR = join(process.cwd(), "src", "adapters");
+/** 获取当前文件所在目录 */
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Adapters 目录路径
+ * 从 core/adapter/ 目录向上两级，然后进入 adapters
+ */
+const ADAPTERS_DIR = join(__dirname, "..", "..", "adapters");
 
 // ============================================================================
 // Adapter Discovery
@@ -105,11 +111,17 @@ export function getConfiguredPlatforms(config: AppConfig): string[] {
 		}
 	}
 
-	// 如果没有配置任何平台，但有 adapter 注册，使用第一个注册的（向后兼容）
+	// 如果没有配置任何平台，但有 adapter 注册，使用第一个非占位符 adapter（向后兼容）
 	if (platforms.length === 0 && knownPlatforms.length > 0) {
-		const firstPlatform = knownPlatforms[0];
-		console.log(`[AdapterLoader] No platform configured, using first available: ${firstPlatform}`);
-		platforms.push(firstPlatform);
+		// 排除占位符 adapter（如 tui，只能通过专用命令启动）
+		const placeholderAdapters = ["tui"];
+		const realPlatforms = knownPlatforms.filter((p) => !placeholderAdapters.includes(p));
+
+		if (realPlatforms.length > 0) {
+			const firstPlatform = realPlatforms[0];
+			console.log(`[AdapterLoader] No platform configured, using first available: ${firstPlatform}`);
+			platforms.push(firstPlatform);
+		}
 	}
 
 	return platforms;

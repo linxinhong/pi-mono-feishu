@@ -183,9 +183,11 @@ export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTok
 	return summary;
 }
 
-export function logConnected(): void {
+export function logConnected(platforms?: string[]): void {
 	if (silentMode) return;
-	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}✓${color.reset} Connected to Feishu`);
+	if (!platforms || platforms.length === 0) return;
+	const platformList = platforms.join(", ");
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}✓${color.reset} Connected to ${platformList}`);
 }
 
 export function logMessageReceive(ctx: LogContext, content: string, messageId: string): void {
