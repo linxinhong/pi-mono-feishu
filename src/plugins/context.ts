@@ -10,7 +10,6 @@ import type { Attachment, ChannelInfo, UserInfo } from "../core/plugin/types.js"
 import type { FeishuCompatibleContext } from "../core/plugin/context.js";
 import { buildFeishuCompatibleContext } from "../core/plugin/context.js";
 import type { PlatformCapabilities } from "../core/plugin/types.js";
-import { FeishuCapabilities } from "../adapters/feishu/capabilities.js";
 
 /**
  * 构建 FeishuPluginContext 的选项
@@ -50,6 +49,9 @@ export interface BuildContextOptions {
 	// 消息管理
 	deleteMessage: () => Promise<void>;
 	sendErrorCard: (message: string) => Promise<void>;
+
+	// 平台能力（可选，用于替代 FeishuCapabilities）
+	capabilities?: PlatformCapabilities;
 }
 
 /**
@@ -57,20 +59,10 @@ export interface BuildContextOptions {
  * @deprecated 建议使用 core/plugin/context.ts 中的 buildPluginContext 和 buildFeishuCompatibleContext
  */
 export function buildPluginContext(options: BuildContextOptions): FeishuCompatibleContext {
-	// 创建飞书能力实例
-	const capabilities = new FeishuCapabilities({
-		chatId: options.message.channel,
-		replaceMessage: options.replaceMessage,
-		respondInThread: options.respondInThread,
-		setTyping: options.setTyping,
-		setWorking: options.setWorking,
-		uploadFile: options.uploadFile,
-		uploadImage: options.uploadImage,
-		sendImage: options.sendImage,
-		sendVoiceMessage: options.sendVoiceMessage,
-		deleteMessage: options.deleteMessage,
-		sendErrorCard: options.sendErrorCard,
-	});
+	// 如果提供了 capabilities，直接使用
+	if (!options.capabilities) {
+		throw new Error("capabilities is required. Please provide PlatformCapabilities.");
+	}
 
 	// 构建通用插件上下文
 	const pluginContext = {
@@ -81,7 +73,7 @@ export function buildPluginContext(options: BuildContextOptions): FeishuCompatib
 		workspaceDir: options.workspaceDir,
 		channelDir: options.channelDir,
 		respond: options.respond,
-		capabilities,
+		capabilities: options.capabilities,
 	};
 
 	// 返回飞书兼容上下文

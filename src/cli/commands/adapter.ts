@@ -9,8 +9,8 @@ import { printTable, printInfo, COLORS } from "../utils/output.js";
 // 已知适配器列表
 // ============================================================================
 
-const KNOWN_ADAPTERS = [
-	{ id: "feishu", name: "Feishu", version: "1.0.0", type: "messaging" },
+const KNOWN_ADAPTERS: { id: string; name: string; version: string; type: string }[] = [
+	// 适配器将通过插件系统加载
 ];
 
 // ============================================================================
@@ -25,26 +25,17 @@ export function registerAdapterCommand(program: Command): void {
 		.command("ls")
 		.description("查看各个 adapter 状态")
 		.action(async () => {
-			// 尝试动态加载适配器信息
-			let adapters = [...KNOWN_ADAPTERS];
-
-			try {
-				const { feishuAdapterFactory } = await import("../../adapters/feishu/index.js");
-				if (feishuAdapterFactory?.meta) {
-					const meta = feishuAdapterFactory.meta;
-					adapters = adapters.map((a) =>
-						a.id === "feishu" ? { ...a, name: meta.name, version: meta.version } : a
-					);
-				}
-			} catch {
-				// 忽略错误，使用默认值
-			}
-
 			// 构建表格数据
 			const headers = ["ID", "Name", "Version", "Type", "Status"];
 			const rows: string[][] = [];
 
-			for (const meta of adapters) {
+			if (KNOWN_ADAPTERS.length === 0) {
+				console.log(`\n${COLORS.bright}No adapters registered${COLORS.reset}`);
+				console.log(`${COLORS.dim}Adapters will be loaded via plugin system${COLORS.reset}\n`);
+				return;
+			}
+
+			for (const meta of KNOWN_ADAPTERS) {
 				const status = `${COLORS.green}available${COLORS.reset}`;
 				rows.push([meta.id, meta.name, `v${meta.version}`, meta.type, status]);
 			}
