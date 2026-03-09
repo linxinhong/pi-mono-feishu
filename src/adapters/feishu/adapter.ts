@@ -5,7 +5,6 @@
 import type { PlatformAdapter } from "../../core/platform/adapter.js";
 import type {
 	UniversalMessage,
-	UniversalResponse,
 	UserInfo,
 	ChannelInfo,
 } from "../../core/platform/message.js";
@@ -20,14 +19,7 @@ import { LarkClient } from "./client/lark-client.js";
 import { getLarkAccount, getEnabledLarkAccounts } from "./client/accounts.js";
 import { MessageHandler, createMessageHandler } from "./messaging/inbound/handler.js";
 import { FeishuMonitor, createFeishuMonitor } from "./channel/monitor.js";
-import {
-	sendMessage,
-	sendCard,
-	updateCard,
-	sendImage,
-	uploadImage,
-	buildMarkdownCard,
-} from "./messaging/outbound/send.js";
+import { sendMessage, sendCard, updateCard } from "./messaging/outbound/send.js";
 import { StreamingCardManager } from "./messaging/outbound/card.js";
 import { FeishuPlatformContext } from "./context.js";
 
@@ -55,42 +47,42 @@ export class FeishuAdapter implements PlatformAdapter {
 		const accounts = getEnabledLarkAccounts(this.config);
 		if (accounts.length === 0) {
 			console.warn("[FeishuAdapter] No enabled accounts found");
-			return;
+			return
 		}
 
-		this.abortController = new AbortController();
+		this.abortController = new AbortController()
 
 		for (const account of accounts) {
-			await this.startAccount(account);
+			await this.startAccount(account)
 		}
 	}
 
 	private async startAccount(account: FeishuAccountConfig): Promise<void> {
-		const larkAccount = getLarkAccount(this.config, account.accountId);
-		const client = LarkClient.fromAccount(larkAccount);
+		const larkAccount = getLarkAccount(this.config, account.accountId)
+		const client = LarkClient.fromAccount(larkAccount)
 
 		// 探测 Bot 身份
-		const probeResult = await client.probe();
+		const probeResult = await client.probe()
 		if (!probeResult.ok) {
 			console.error(
 				`[FeishuAdapter] Failed to probe bot identity for ${account.accountId}: ${probeResult.error}`
-			);
-			return;
+			)
+			return
 		}
 
 		console.log(
 			`[FeishuAdapter] Bot identity: ${probeResult.botName} (${probeResult.botOpenId})`
-		);
+		)
 
-		this.clients.set(account.accountId, client);
+		this.clients.set(account.accountId, client)
 
 		// 创建消息处理器
 		const handler = createMessageHandler({
 			botOpenId: client.botOpenId,
 			dmPolicy: account.dmPolicy,
 			groupPolicy: account.groupPolicy,
-		});
-		this.messageHandlers.set(account.accountId, handler);
+		})
+		this.messageHandlers.set(account.accountId, handler)
 
 		// 创建并启动监控器
 		const monitor = createFeishuMonitor({
@@ -98,244 +90,243 @@ export class FeishuAdapter implements PlatformAdapter {
 			abortSignal: this.abortController?.signal,
 			callbacks: {
 				onMessage: async (event: FeishuMessageEvent) => {
-					await this.handleMessage(account.accountId, event);
+					await this.handleMessage(account.accountId, event)
 				},
 				onConnectionChange: (connected: boolean) => {
 					console.log(
 						`[FeishuAdapter] Account ${account.accountId} connection: ${connected ? "connected" : "disconnected"}`
-					);
+					)
 				},
 				onError: (error: Error) => {
 					console.error(
 						`[FeishuAdapter] Account ${account.accountId} error:`,
 						error
-					);
+					)
 				},
 			},
-		});
+		})
 
-		this.monitors.set(account.accountId, monitor);
-		await monitor.start();
+		this.monitors.set(account.accountId, monitor)
+		await monitor.start()
 	}
 
 	private async handleMessage(
 		accountId: string,
 		event: FeishuMessageEvent
 	): Promise<void> {
-		const handler = this.messageHandlers.get(accountId);
-		if (!handler) return;
+		const handler = this.messageHandlers.get(accountId)
+		if (!handler) return
 
 		await handler.handle(event, async (message: UniversalMessage) => {
 			if (this.messageCallback) {
-				this.messageCallback(message);
+				this.messageCallback(message)
 			}
-		});
+		})
 	}
 
 	async stop(): Promise<void> {
-		this.abortController?.abort();
+		this.abortController?.abort()
 
 		for (const monitor of this.monitors.values()) {
-			monitor.stop();
+			monitor.stop()
 		}
-		this.monitors.clear();
+		this.monitors.clear()
 
 		for (const client of this.clients.values()) {
-			client.disconnect();
+			client.disconnect()
 		}
-		this.clients.clear();
+		this.clients.clear()
 
 		for (const handler of this.messageHandlers.values()) {
-			handler.dispose();
+			handler.dispose()
 		}
-		this.messageHandlers.clear();
+		this.messageHandlers.clear()
 
-		this.runningChannels.clear();
+		this.runningChannels.clear()
 	}
 
-	async sendMessage(response: UniversalResponse): Promise<void> {
-		const client = this.getFirstClient();
-		if (!client) return;
+	async sendMessage(response: { chatId: string; text: string }): Promise<string | undefined> {
+		const client = this.getFirstClient()
+		if (!client) return undefined
 
-		if (response.type === "card") {
-			await sendCard(client, {
-				to: response.messageId || "",
-				card: response.content as any,
-			});
-		} else if (response.type === "image" && response.imageKey) {
-			await sendImage(client, {
-				to: response.messageId || "",
-				imageKey: response.imageKey,
-			});
-		} else {
-			await sendMessage(client, {
-				to: response.messageId || "",
-				text: response.content as string,
-			});
-		}
+		return await sendMessage(client.getClient(), response)
 	}
 
-	async updateMessage(messageId: string, response: UniversalResponse): Promise<void> {
-		const client = this.getFirstClient();
-		if (!client) return;
+	async updateMessage(messageId: string, content: string): Promise<void> {
+		const client = this.getFirstClient()
+		if (!client) return
 
-		if (response.type === "card") {
-			await updateCard(client, {
-				messageId,
-				card: response.content as any,
-			});
-		} else {
-			// 文本消息更新
-			const card = buildMarkdownCard(response.content as string);
-			await updateCard(client, {
-				messageId,
-				card,
-			});
-		}
+		await updateCard(client.getClient(), messageId, JSON.parse(content))
 	}
 
-	async deleteMessage(messageId: string): Promise<void> {
-		const client = this.getFirstClient();
-		if (!client) return;
-
-		await client.sdk.im.message.delete({
-			path: { message_id: messageId },
-		});
+	async deleteMessage(_messageId: string): Promise<void> {
+		// 飞书不支持删除消息
 	}
 
-	async uploadFile(filePath: string): Promise<string> {
-		const client = this.getFirstClient();
-		if (!client) throw new Error("No LarkClient available");
-
-		const { uploadFile } = await import("./messaging/outbound/send.js");
-		return uploadFile(client, filePath);
+	async uploadFile(_filePath: string, _chatId: string): Promise<void> {
+		// TODO: 实现文件上传
 	}
 
-	async uploadImage(imagePath: string): Promise<string> {
-		const client = this.getFirstClient();
-		if (!client) throw new Error("No LarkClient available");
-
-		return uploadImage(client, imagePath);
+	async uploadImage(_imagePath: string): Promise<string | undefined> {
+		return undefined
 	}
+
+	async sendImage(_chatId: string, _imageKey: string): Promise<string | undefined> {
+		return undefined
+	}
+
+	async sendVoiceMessage(_chatId: string, _filePath: string): Promise<string | undefined> {
+		return undefined
+	}
+
+	async postInThread(_chatId: string, _parentMessageId: string, _text: string): Promise<string | undefined> {
+		return undefined
+	}
+
+	onMessage(callback: (message: UniversalMessage) => void): void {
+		this.messageCallback = callback
+	}
+
+	// ============================================================================
+	// PlatformAdapter 接口实现
+	// ============================================================================
 
 	async getUserInfo(userId: string): Promise<UserInfo | undefined> {
-		const client = this.getFirstClient();
-		if (!client) return undefined;
+		const client = this.getFirstClient()
+		if (!client) return undefined
 
 		try {
-			const response = await client.sdk.contact.user.batchGet({
-				data: {
-					user_id_type: "open_id",
-					user_ids: [userId],
-				},
-			});
+			const result = await client.getClient().contact.user.get({
+				path: { user_id: userId },
+				params: { user_id_type: "open_id" }
+			})
 
-			const user = response?.data?.items?.[0];
-			if (!user) return undefined;
-
-			return {
-				id: user.open_id ?? userId,
-				userName: user.name ?? userId,
-				displayName: user.name ?? userId,
-				avatar: user.avatar?.avatar_origin ?? undefined,
-			};
+			if (result.data?.user) {
+				return {
+					id: userId,
+					userName: result.data.user.name ?? userId,
+					displayName: result.data.user.name ?? userId,
+				}
+			}
 		} catch {
-			return undefined;
+			return undefined
 		}
-	}
-
-	async getAllUsers(): Promise<UserInfo[]> {
-		// 飞书 API 需要分页，这里简化处理
-		return [];
 	}
 
 	async getChannelInfo(channelId: string): Promise<ChannelInfo | undefined> {
-		const client = this.getFirstClient();
-		if (!client) return undefined;
+		const client = this.getFirstClient()
+		if (!client) return undefined
 
 		try {
-			const response = await client.sdk.im.chat.get({
-				path: { chat_id: channelId },
-			});
+			const result = await client.getClient().im.chat.get({
+				path: { chat_id: channelId }
+			})
 
-			return {
-				id: channelId,
-				name: response?.data?.name ?? channelId,
-			};
+			if (result.data?.chat) {
+				return {
+					id: channelId,
+					name: result.data.chat.name ?? channelId,
+				}
+			}
 		} catch {
-			return undefined;
+			return undefined
 		}
 	}
 
-	async getAllChannels(): Promise<ChannelInfo[]> {
-		// 需要分页处理，简化返回
-		return [];
-	}
+	async createChannelContext(chatId: string): Promise<PlatformContext> {
+		const client = this.getFirstClient()
+		if (!client) {
+			throw new Error("No client available")
+		}
 
-	onMessage(handler: (message: UniversalMessage) => void): void {
-		this.messageCallback = handler;
-	}
-
-	createPlatformContext(chatId: string): PlatformContext {
-		const client = this.getFirstClient();
 		return new FeishuPlatformContext({
 			client,
 			chatId,
 			adapter: this,
-		});
+		})
 	}
 
-	isRunning(channelId: string): boolean {
-		return this.runningChannels.has(channelId);
-	}
-
-	setRunning(channelId: string, abort: () => void): void {
-		this.runningChannels.set(channelId, abort);
-	}
-
-	clearRunning(channelId: string): void {
-		this.runningChannels.delete(channelId);
-	}
-
-	abortChannel(channelId: string): void {
-		const abort = this.runningChannels.get(channelId);
-		if (abort) {
-			abort();
-			this.runningChannels.delete(channelId);
-		}
-	}
-
-	getDefaultModel(): string | undefined {
-		return this.config.model;
-	}
-
-	// ============================================================================
-	// 公共方法（供 PlatformContext 使用）
-	// ============================================================================
-
-	/**
-	 * 获取或创建卡片管理器
-	 */
-	getCardManager(chatId: string): StreamingCardManager {
-		let manager = this.cardManagers.get(chatId);
-		if (!manager) {
-			manager = new StreamingCardManager();
-			this.cardManagers.set(chatId, manager);
-		}
-		return manager;
-	}
-
-	/**
-	 * 获取第一个可用的客户端
-	 */
 	private getFirstClient(): LarkClient | undefined {
-		return this.clients.values().next().value;
+		return this.clients.values().next().value
+	}
+
+	// ============================================================================
+	// 流式卡片支持
+	// ============================================================================
+
+	/**
+	 * 开始流式卡片
+	 */
+	async startStreamingCard(chatId: string): Promise<string | undefined> {
+		const manager = this.getCardManager(chatId)
+		const result = await manager.start(async (card) => {
+			return await sendCard(this.getFirstClient()!.getClient(), chatId, card)
+		})
+		return result.messageId
 	}
 
 	/**
-	 * 根据 chatId 获取客户端（简化： 返回第一个）
+	 * 更新流式卡片
 	 */
-	getClient(chatId: string): LarkClient | undefined {
-		return this.getFirstClient();
+	async updateStreamingCard(
+		messageId: string,
+		text: string,
+		options?: {
+			toolCalls?: { name: string; status: string }[]
+			reasoningText?: string
+		}
+	): Promise<void> {
+		const manager = this.getCardManager("")
+		await manager.update(
+			async (card) => {
+				await updateCard(this.getFirstClient()!.getClient(), messageId, card)
+			},
+			text,
+			{
+				toolCalls: options?.toolCalls,
+				reasoningText: options?.reasoningText,
+			}
+		)
+	}
+
+	/**
+	 * 完成流式卡片
+	 */
+	async completeStreamingCard(
+		messageId: string,
+		text: string,
+		options?: {
+			toolCalls?: { name: string; status: string }[]
+			isError?: boolean
+			isAborted?: boolean
+			reasoningText?: string
+			reasoningElapsedMs?: number
+			footer?: { status?: boolean; elapsed?: boolean }
+		}
+	): Promise<void> {
+		const manager = this.getCardManager("")
+		await manager.complete(
+			async (card) => {
+				await updateCard(this.getFirstClient()!.getClient(), messageId, card)
+			},
+			text,
+			{
+				toolCalls: options?.toolCalls,
+				isError: options?.isError,
+				isAborted: options?.isAborted,
+				reasoningText: options?.reasoningText,
+				reasoningElapsedMs: options?.reasoningElapsedMs,
+				footer: options?.footer,
+			}
+		)
+	}
+
+	private getCardManager(chatId: string): StreamingCardManager {
+		let manager = this.cardManagers.get(chatId)
+		if (!manager) {
+			manager = new StreamingCardManager()
+			this.cardManagers.set(chatId, manager)
+		}
+		return manager
 	}
 }

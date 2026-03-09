@@ -4,10 +4,9 @@
 
 import { adapterRegistry } from "../../core/adapter/registry.js";
 import type { AdapterFactory, Bot, BotConfig } from "../../core/adapter/types.js";
-import type { PlatformAdapter } from "../../core/platform/adapter.js";
 import { UnifiedBot } from "../../core/unified-bot.js";
 import { FeishuAdapter } from "./adapter.js";
-import { FeishuStore } from "./store.js";
+import { FeishuStore } from "./store.js"
 import type { FeishuAdapterConfig } from "./types.js";
 
 // ============================================================================
@@ -24,15 +23,16 @@ export async function createFeishuBot(config: BotConfig): Promise<Bot> {
 		platform: "feishu",
 		enabled: true,
 		...feishuConfig,
-	});
+	 workingDir: config.workspaceDir || ""
 
-	// 创建 UnifiedBot
 	const bot = new UnifiedBot({
-		adapter,
-		store: new FeishuStore(config.workspaceDir || ""),
-	});
+	 adapter,
+        store: new FeishuStore(workingDir),
+        workingDir,
+        pluginManager: config.pluginManager,
+    })
 
-	return bot;
+    return bot
 }
 
 // ============================================================================
@@ -44,16 +44,16 @@ export async function createFeishuBot(config: BotConfig): Promise<Bot> {
  */
 const factory: AdapterFactory = {
 	meta: {
-		id: "feishu",
-		name: "Feishu Adapter",
-		version: "1.0.0",
-		description: "Feishu/Lark platform adapter for pi-claw",
-	},
+        id: "feishu",
+        name: "Feishu Adapter",
+        version: "1.0.0",
+        description: "Feishu/Lark platform adapter for pi-claw",
+    },
 
-	async createBot(config: BotConfig): Promise<Bot> {
-		return createFeishuBot(config);
-	},
-};
+    async createBot(config: BotConfig): Promise<Bot> {
+        return createFeishuBot(config)
+    },
+}
 
 // 注册
-adapterRegistry.register(factory);
+adapterRegistry.register(factory)

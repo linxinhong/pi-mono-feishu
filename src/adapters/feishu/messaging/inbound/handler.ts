@@ -13,7 +13,7 @@ import type {
 import { parseMessageEvent, mentionedBot, stripBotMentions } from "./parse.js";
 import { MessageDeduplicator, SimpleMessageDedup } from "./dedup.js";
 import { checkMessageGate } from "./gate.js";
-import type { UniversalMessage } from "../../../core/platform/message.js";
+import type { UniversalMessage } from "../../../../core/platform/message.js";
 
 // ============================================================================
 // 类型
