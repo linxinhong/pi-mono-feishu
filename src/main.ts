@@ -19,9 +19,7 @@ import { createGlobalLogger, PiLogger } from "./utils/logger/index.js";
 import type { LogConfig } from "./utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
 import { ConfigManager } from "./core/config/manager.js";
-import { PluginManager } from "./core/plugin/manager.js";
-import { debugPlugin } from "./plugins/debug/index.js";
-import { voicePlugin } from "./plugins/voice/index.js";
+import { PluginManager, loadPlugins } from "./core/plugin/index.js";
 
 // 重新导出主要入口函数和类型（供外部使用）
 export type { SandboxConfig } from "./core/sandbox/index.js";
@@ -130,13 +128,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	// 设置 HookManager
 	pluginManager.setHookManager(hookManager);
 
-	// 注册插件
-	pluginManager.registerAll([debugPlugin, voicePlugin]);
-
 	// 设置平台（如果有配置的平台，使用第一个平台）
 	if (platforms.length > 0) {
 		pluginManager.setPlatform(platforms[0]);
 	}
+
+	// 动态加载插件（根据配置）
+	await loadPlugins(pluginManager, (config.plugins as Record<string, any>) || {});
 
 	// 初始化插件（在 system:before-start 之前，让 debug 插件能记录所有事件）
 	await pluginManager.initialize();

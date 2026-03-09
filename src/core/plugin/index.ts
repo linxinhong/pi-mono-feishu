@@ -40,3 +40,6 @@ export {
 
 // Manager
 export { PluginManager } from "./manager.js";
+
+// Loader
+export { discoverPlugins, loadPlugins } from "./loader.js";
