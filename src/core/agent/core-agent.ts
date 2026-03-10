@@ -356,6 +356,11 @@ export class CoreAgent {
 				await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
 			}
 
+			// 显示"思考中"卡片（飞书平台）
+			if ((platformContext as any).startThinking) {
+				await (platformContext as any).startThinking();
+			}
+
 			// 更新系统提示
 			await this.updateSystemPrompt(state, chatId, channelDir, platformContext, additionalContext);
 

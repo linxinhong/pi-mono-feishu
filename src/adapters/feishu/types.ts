@@ -79,6 +79,8 @@ export interface FeishuAdapterConfig extends FeishuConfig, FeishuPolicyConfig, F
 	enabled?: boolean;
 	/** 默认模型 */
 	defaultModel?: string;
+	/** 预热频道列表（启动时提前初始化这些频道的 Agent） */
+	warmupChannels?: string[];
 	/** 工具开关 */
 	tools?: {
 		doc?: boolean;

@@ -93,6 +93,7 @@ export async function createFeishuBot(config: BotConfig & { feishu: FeishuAdapte
 		store,
 		pluginManager,
 		defaultModel: feishu.defaultModel || config.model,
+		warmupChannels: feishu.warmupChannels,
 	});
 
 	return bot;

@@ -35,6 +35,8 @@ export interface UnifiedBotConfig {
 	port?: number;
 	/** 全局默认模型 ID（来自 config.json 的 model 字段） */
 	defaultModel?: string;
+	/** 预热频道列表（启动时提前初始化这些频道的 Agent） */
+	warmupChannels?: string[];
 }
 
 // ============================================================================
@@ -55,12 +57,14 @@ export class UnifiedBot {
 	private coreAgent: CoreAgent;
 	private workingDir: string;
 	private eventsWatcher: EventsWatcher | null = null;
+	private warmupChannels: string[];
 
 	constructor(config: UnifiedBotConfig) {
 		this.workingDir = config.workingDir;
 		this.store = config.store;
 		this.pluginManager = config.pluginManager;
 		this.adapter = config.adapter;
+		this.warmupChannels = config.warmupChannels || [];
 
 		// 获取 ConfigManager 单例
 		let configManager: ConfigManager | undefined;
@@ -122,6 +126,12 @@ export class UnifiedBot {
 		// 启动事件监控（已在构造函数中创建）
 		if (this.eventsWatcher) {
 			this.eventsWatcher.start();
+		}
+
+		// 预热频道
+		if (this.warmupChannels.length > 0 && this.adapter && 'warmupChannelsAsync' in this.adapter) {
+			console.log(`[UnifiedBot] Warming up ${this.warmupChannels.length} channels...`);
+			await (this.adapter as any).warmupChannelsAsync(this.coreAgent, this.warmupChannels);
 		}
 
 		console.log(`[UnifiedBot] Started on ${this.adapter.platform} platform`);
