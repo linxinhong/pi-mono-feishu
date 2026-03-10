@@ -48,6 +48,9 @@ export class FeishuAdapter implements PlatformAdapter {
 	private defaultModel: string | undefined;
 	private workspaceDir: string = "";
 
+	/** 预热频道列表 */
+	private warmupChannels: string[] = [];
+
 	constructor(config: FeishuAdapterConfig) {
 		this.config = config;
 		this.logger = new PiLogger("feishu", {
@@ -133,6 +136,49 @@ export class FeishuAdapter implements PlatformAdapter {
 		});
 
 		this.logger.info("FeishuAdapter started");
+	}
+
+	/**
+	 * 设置预热频道列表
+	 * @param channels 频道 ID 列表
+	 */
+	setWarmupChannels(channels: string[]): void {
+		this.warmupChannels = channels;
+	}
+
+	/**
+	 * 获取活跃频道列表
+	 * 用于预热，子类可以覆盖此方法
+	 */
+	getActiveChannels(): string[] {
+		return this.warmupChannels;
+	}
+
+	/**
+	 * 预热指定频道
+	 * @param coreAgent CoreAgent 实例
+	 * @param channels 频道列表（可选，默认使用 warmupChannels）
+	 */
+	async warmupChannelsAsync(coreAgent: any, channels?: string[]): Promise<void> {
+		const targetChannels = channels || this.warmupChannels;
+		if (targetChannels.length === 0) {
+			this.logger.debug("No channels to warmup");
+			return;
+		}
+
+		this.logger.info(`Warming up ${targetChannels.length} channels...`);
+
+		for (const channelId of targetChannels) {
+			try {
+				const platformContext = this.createPlatformContext(channelId);
+				await coreAgent.warmup(channelId, platformContext);
+				this.logger.debug(`Warmed up channel: ${channelId}`);
+			} catch (error) {
+				this.logger.error(`Failed to warmup channel ${channelId}`, undefined, error as Error);
+			}
+		}
+
+		this.logger.info("Channel warmup completed");
 	}
 
 	async stop(): Promise<void> {

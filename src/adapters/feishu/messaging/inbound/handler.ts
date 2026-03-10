@@ -5,7 +5,7 @@
  */
 
 import type { UniversalMessage, Attachment } from "../../../../core/platform/message.js";
-import type { FeishuMessageContext, FeishuAdapterConfig, FeishuMessageEvent, FeishuRawMessage } from "../../types.js";
+import type { FeishuMessageContext, FeishuAdapterConfig, FeishuMessageEvent, FeishuRawMessage, FeishuUserInfo } from "../../types.js";
 import type { LarkClient } from "../../client/index.js";
 import type { FeishuStore } from "../../store.js";
 import type { PiLogger } from "../../../../utils/logger/index.js";
@@ -27,6 +27,17 @@ export interface MessageHandlerOptions {
 	logger?: PiLogger;
 }
 
+/**
+ * 用户信息缓存条目
+ */
+interface UserInfoCacheEntry {
+	info: Partial<FeishuUserInfo>;
+	expiresAt: number;
+}
+
+// 用户信息缓存 TTL（10 分钟）
+const USER_INFO_CACHE_TTL = 10 * 60 * 1000;
+
 // ============================================================================
 // Message Handler
 // ============================================================================
@@ -41,6 +52,9 @@ export class MessageHandler {
 	private logger?: PiLogger;
 	private parser: MessageParser;
 	private gate: MessageGate;
+
+	/** 用户信息缓存 */
+	private userInfoCache = new Map<string, UserInfoCacheEntry>();
 
 	constructor(options: MessageHandlerOptions) {
 		this.larkClient = options.larkClient;
@@ -117,11 +131,28 @@ export class MessageHandler {
 	}
 
 	/**
-	 * 获取发送者信息
+	 * 获取发送者信息（带缓存）
 	 */
 	private async getSenderInfo(context: FeishuMessageContext): Promise<{ name?: string; nickname?: string; avatar_url?: string }> {
+		const cacheKey = context.sender.openId;
+		const now = Date.now();
+
+		// 检查缓存
+		const cached = this.userInfoCache.get(cacheKey);
+		if (cached && cached.expiresAt > now) {
+			this.logger?.debug("User info cache hit", { openId: cacheKey });
+			return cached.info;
+		}
+
 		try {
 			const userInfo = await this.larkClient.getUserInfo(context.sender.openId);
+			if (userInfo) {
+				// 存入缓存
+				this.userInfoCache.set(cacheKey, {
+					info: userInfo,
+					expiresAt: now + USER_INFO_CACHE_TTL,
+				});
+			}
 			return userInfo || {};
 		} catch {
 			return {};

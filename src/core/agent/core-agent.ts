@@ -235,6 +235,75 @@ export class CoreAgent {
 	}
 
 	/**
+	 * 预热频道 Agent
+	 *
+	 * 提前初始化 Agent 状态，减少首次消息响应延迟
+	 * @param channelId 频道 ID
+	 * @param platformContext 平台上下文
+	 * @param additionalContext 附加上下文
+	 */
+	async warmup(
+		channelId: string,
+		platformContext: PlatformContext,
+		additionalContext: Partial<AgentContext> = {},
+	): Promise<void> {
+		const channelDir = getChannelDir(channelId);
+
+		// 确保目录存在
+		await mkdir(channelDir, { recursive: true });
+
+		// 检查是否已经初始化
+		let state = channelStates.get(channelId);
+		if (state?.agent) {
+			log.logInfo(`[Agent] Channel ${channelId} already warmed up`);
+			return;
+		}
+
+		log.logInfo(`[Agent] Warming up channel ${channelId}`);
+
+		// 使用 ConfigManager 加载频道配置
+		const configManager = this.config.configManager;
+		if (configManager) {
+			configManager.watchChannelConfig(channelId);
+			const channelConfig = configManager.getChannelConfig(channelId);
+			if (channelConfig.model) {
+				this.config.modelManager.switchChannelModel(channelId, channelConfig.model);
+			}
+		} else {
+			const modelConfigPath = join(channelDir, "channel-config.json");
+			this.config.modelManager.loadChannelModels(modelConfigPath);
+		}
+
+		// 创建初始状态
+		if (!state) {
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null };
+			channelStates.set(channelId, state);
+		}
+
+		// 创建一个空的预热消息
+		const warmupMessage: UniversalMessage = {
+			id: "warmup",
+			platform: platformContext.platform as "feishu" | "wechat" | "weibo",
+			type: "text",
+			content: "",
+			sender: {
+				id: "system",
+				name: "System",
+			},
+			chat: {
+				id: channelId,
+				type: "private",
+			},
+			timestamp: new Date(),
+		};
+
+		// 初始化 Agent（不执行）
+		await this.initializeAgent(state, channelId, channelDir, warmupMessage, platformContext, additionalContext);
+
+		log.logInfo(`[Agent] Channel ${channelId} warmed up successfully`);
+	}
+
+	/**
 	 * 处理消息（轻量平台感知）
 	 */
 	async processMessage(

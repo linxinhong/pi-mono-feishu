@@ -47,6 +47,10 @@ export class FeishuPlatformContext implements PlatformContext {
 	private currentCardMessageId: string | null = null;
 	private currentCardStatus: "thinking" | "streaming" | "complete" | null = null;
 
+	// 思考中卡片状态
+	private thinkingStartTime: number | null = null;
+	private hideThinking: boolean = true;
+
 	constructor(options: FeishuPlatformContextOptions) {
 		this.chatId = options.chatId;
 		this.larkClient = options.larkClient;
@@ -54,6 +58,20 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.store = options.store;
 		this.logger = options.logger;
 		this.cardBuilder = new CardBuilder();
+	}
+
+	/**
+	 * 设置是否隐藏思考过程
+	 */
+	setHideThinking(hide: boolean): void {
+		this.hideThinking = hide;
+	}
+
+	/**
+	 * 检查是否隐藏思考过程
+	 */
+	isThinkingHidden(): boolean {
+		return this.hideThinking;
 	}
 
 	// ========================================================================
@@ -156,11 +174,70 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
+		// 计算耗时
+		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
+
 		// 更新为完成状态
-		const card = this.cardBuilder.buildCompleteCard(content);
+		const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
 		await this.messageSender.updateCard(this.currentCardMessageId, card);
 		this.currentCardStatus = "complete";
 		this.currentCardMessageId = null;
+		this.thinkingStartTime = null;
+	}
+
+	// ========================================================================
+	// 思考中卡片（CoreAgent 兼容接口）
+	// ========================================================================
+
+	/**
+	 * 开始思考（发送思考中卡片）
+	 */
+	async startThinking(): Promise<void> {
+		this.thinkingStartTime = Date.now();
+		await this.showThinking();
+	}
+
+	/**
+	 * 更新思考内容
+	 * @param content 思考内容
+	 */
+	async updateThinking(content: string): Promise<void> {
+		// 如果隐藏思考过程，不更新卡片内容
+		if (this.hideThinking) {
+			return;
+		}
+
+		if (!this.currentCardMessageId) {
+			// 如果没有卡片，创建一个
+			this.thinkingStartTime = Date.now();
+			await this.showThinking();
+		}
+
+		// 更新卡片显示思考内容
+		const card = this.cardBuilder.buildStreamingCard(`💭 思考中...\n\n${content}`);
+		await this.messageSender.updateCard(this.currentCardMessageId!, card);
+	}
+
+	/**
+	 * 完成思考，显示最终回复
+	 * @param content 最终回复内容
+	 */
+	async finishThinking(content: string): Promise<void> {
+		if (!this.currentCardMessageId) {
+			// 如果没有卡片，直接发送文本
+			await this.messageSender.sendText(this.chatId, content);
+			return;
+		}
+
+		// 计算耗时
+		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
+
+		// 更新为完成状态
+		const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
+		await this.messageSender.updateCard(this.currentCardMessageId, card);
+		this.currentCardStatus = "complete";
+		this.currentCardMessageId = null;
+		this.thinkingStartTime = null;
 	}
 
 	/**
@@ -196,6 +273,18 @@ export class FeishuPlatformContext implements PlatformContext {
 
 			case "finishStatus":
 				return this.finishStatus.bind(this) as T;
+
+			case "startThinking":
+				return this.startThinking.bind(this) as T;
+
+			case "updateThinking":
+				return this.updateThinking.bind(this) as T;
+
+			case "finishThinking":
+				return this.finishThinking.bind(this) as T;
+
+			case "isThinkingHidden":
+				return this.isThinkingHidden.bind(this) as T;
 
 			case "addReaction":
 				return this.addReaction.bind(this) as T;
