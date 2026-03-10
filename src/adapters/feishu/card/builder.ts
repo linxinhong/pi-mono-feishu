@@ -20,9 +20,19 @@ interface CardElement {
 	[key: string]: any;
 }
 
+interface CardHeader {
+	title: { content: string; tag: "plain_text" | "lark_md" };
+	subtitle?: { content: string; tag: "plain_text" | "lark_md" };
+	template?: string;
+}
+
 interface Card {
+	schema: "2.0";
 	config?: CardConfig;
-	elements: CardElement[];
+	header?: CardHeader;
+	body: {
+		elements: CardElement[];
+	};
 }
 
 // ============================================================================
@@ -43,25 +53,28 @@ export class CardBuilder {
 	 */
 	buildThinkingCard(): Card {
 		return {
+			schema: "2.0",
 			config: this.defaultConfig,
-			elements: [
-				{
-					tag: "div",
-					text: {
-						tag: "plain_text",
-						content: "🤔 思考中...",
-					},
-				},
-				{
-					tag: "note",
-					elements: [
-						{
+			body: {
+				elements: [
+					{
+						tag: "div",
+						text: {
 							tag: "plain_text",
-							content: "正在处理您的请求，请稍候...",
+							content: "🤔 思考中...",
 						},
-					],
-				},
-			],
+					},
+					{
+						tag: "note",
+						elements: [
+							{
+								tag: "plain_text",
+								content: "正在处理您的请求，请稍候...",
+							},
+						],
+					},
+				],
+			},
 		};
 	}
 
@@ -97,8 +110,9 @@ export class CardBuilder {
 		});
 
 		return {
+			schema: "2.0",
 			config: this.defaultConfig,
-			elements,
+			body: { elements },
 		};
 	}
 
@@ -168,8 +182,9 @@ export class CardBuilder {
 		}
 
 		return {
+			schema: "2.0",
 			config: this.defaultConfig,
-			elements,
+			body: { elements },
 		};
 	}
 
@@ -178,16 +193,19 @@ export class CardBuilder {
 	 */
 	buildErrorCard(error: string): Card {
 		return {
+			schema: "2.0",
 			config: this.defaultConfig,
-			elements: [
-				{
-					tag: "div",
-					text: {
-						tag: "lark_md",
-						content: `❌ **发生错误**\n\n${this.escapeMarkdown(error)}`,
+			body: {
+				elements: [
+					{
+						tag: "div",
+						text: {
+							tag: "lark_md",
+							content: `❌ **发生错误**\n\n${this.escapeMarkdown(error)}`,
+						},
 					},
-				},
-			],
+				],
+			},
 		};
 	}
 
