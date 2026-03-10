@@ -22,7 +22,7 @@
 ### bash - Shell 命令执行
 
 **最佳实践：**
-- 使用绝对路径或相对于 workspace 的路径
+- 使用绝对路径或相对于 {workspaceDir} 的路径
 - 先检查命令是否存在
 - 设置合理的超时时间
 - 捕获并处理错误输出
@@ -31,7 +31,7 @@
 - rm -rf 无确认
 - 无限循环
 - 后台执行的进程
-- 访问 workspace 外的文件
+- 访问 {workspaceDir} 外的文件
 
 **安全模式命令：**
 ```bash
@@ -91,7 +91,7 @@ docker system prune
 
 **避免：**
 - 覆盖 .git 目录
-- 写入 workspace 外
+- 写入 {workspaceDir} 外
 - 覆盖 package-lock.json
 
 ### edit - 文件编辑

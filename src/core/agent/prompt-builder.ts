@@ -160,7 +160,7 @@ export function loadBootFiles(workspaceDir: string): BootContents {
 			.replace(/{USER_MD}/g, `${workspaceDir}/boot/user.md`)
 			.replace(/{workspaceDir}/g, workspaceDir),
 		soul: readFile(join(workspaceDir, "boot/soul.md")).replace(/{workspaceDir}/g, workspaceDir),
-		tools: readFile(join(workspaceDir, "boot/tools.md")),
+		tools: readFile(join(workspaceDir, "boot/tools.md")).replace(/{workspaceDir}/g, workspaceDir),
 	};
 
 	// 保存到缓存
