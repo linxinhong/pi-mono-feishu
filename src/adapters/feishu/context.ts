@@ -497,7 +497,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
-	 * 开始工具调用（只在内存中记录，不显示卡片)
+	 * 开始工具调用（创建/更新工具卡片）
 	 */
 	async startToolCall(toolName: string, args?: Record<string, any>): Promise<void> {
 		this.toolCalls.push({
@@ -505,11 +505,40 @@ export class FeishuPlatformContext implements PlatformContext {
 			args: args,
 			status: "running",
 		});
-		// 不再在处理过程中创建/更新工具卡片
+
+		// 更新或创建工具卡片
+		await this.updateOrCreateToolCard();
 	}
 
 	/**
-	 * 结束工具调用（只在内存中记录，不显示卡片)
+	 * 更新或创建工具卡片
+	 */
+	private async updateOrCreateToolCard(): Promise<void> {
+		if (this.toolCalls.length === 0) return;
+
+		try {
+			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls);
+
+			if (this.cardIds.toolCardId) {
+				// 更新现有卡片
+				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
+			} else {
+				// 创建新卡片
+				const messageId = await this.messageSender.sendCard(this.chatId, toolCard);
+				this.cardIds.toolCardId = messageId;
+			}
+		} catch (error: any) {
+			// 检查是否是速率限制错误 (230020)
+			if (error?.code === 230020) {
+				this.logger?.debug("Tool card update rate limited, skipping");
+				return;
+			}
+			this.logger?.error("Failed to update tool card", undefined, error as Error);
+		}
+	}
+
+	/**
+	 * 结束工具调用（更新工具卡片）
 	 */
 	async endToolCall(toolName: string, success: boolean, result?: string): Promise<void> {
 		// 找到最近一个同名的 running 状态工具
@@ -518,7 +547,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCall.status = success ? "success" : "error";
 			toolCall.result = result;
 		}
-		// 不再在处理过程中更新工具卡片
+
+		// 更新工具卡片
+		await this.updateOrCreateToolCard();
 	}
 
 	/**

@@ -353,14 +353,19 @@ export class CoreAgent {
 		state.processing = true;
 
 		try {
+			// 显示"思考中"卡片（飞书平台）
+			// 注意：必须在 initializeAgent 之前调用，因为 initializeAgent 会读取 hideThinking 状态
+			if ((platformContext as any).startThinking) {
+				await (platformContext as any).startThinking();
+			}
+
 			// 初始化 Agent
 			if (!state.agent) {
 				await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
-			}
-
-			// 显示"思考中"卡片（飞书平台）
-			if ((platformContext as any).startThinking) {
-				await (platformContext as any).startThinking();
+			} else {
+				// Agent 已存在，更新 thinkingLevel（因为 hideThinking 可能在 startThinking 中改变了）
+				const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
+				state.agent.setThinkingLevel(hideThinking ? "off" : "medium");
 			}
 
 			// 更新系统提示
