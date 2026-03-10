@@ -208,9 +208,7 @@ export function buildSystemPrompt(
 	}
 
 	// 2. Context
-	prompt += `You are Pi-Claw, a platform-agnostic AI assistant. Be concise. No emojis.
-
-## Context
+	prompt += `## Context
 - Current date/time: use \`date\` command
 - Platform: ${context.platform.platform}
 - Timezone: Asia/Shanghai
