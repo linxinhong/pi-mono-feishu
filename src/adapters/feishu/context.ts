@@ -155,19 +155,31 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 更新流式输出内容
 	 */
 	async updateStreaming(content: string): Promise<void> {
-		if (!this.currentCardMessageId) {
-			// 如果没有卡片，创建一个新的
+		// 如果已有卡片，尝试更新
+		if (this.currentCardMessageId) {
+			try {
+				const card = this.cardBuilder.buildStreamingCard(content);
+				await this.messageSender.updateCard(this.currentCardMessageId, card);
+				this.currentCardStatus = "streaming";
+				return;
+			} catch (error) {
+				// 更新失败，记录错误并尝试创建新卡片
+				this.logger?.error("Failed to update card", undefined, error as Error);
+				this.currentCardMessageId = null;
+			}
+		}
+
+		// 创建新卡片
+		try {
 			const card = this.cardBuilder.buildStreamingCard(content);
 			const messageId = await this.messageSender.sendCard(this.chatId, card);
 			this.currentCardMessageId = messageId;
 			this.currentCardStatus = "streaming";
-			return;
+		} catch (error) {
+			this.logger?.error("Failed to send card", undefined, error as Error);
+			// 发送失败，降级为文本消息
+			await this.messageSender.sendText(this.chatId, content);
 		}
-
-		// 更新现有卡片
-		const card = this.cardBuilder.buildStreamingCard(content);
-		await this.messageSender.updateCard(this.currentCardMessageId, card);
-		this.currentCardStatus = "streaming";
 	}
 
 	/**
@@ -256,16 +268,31 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 累积工具状态
 		this.toolStatusLines.push(statusText);
 
-		if (!this.currentCardMessageId) {
-			// 如果没有卡片，创建一个
-			this.thinkingStartTime = Date.now();
-			await this.showThinking();
+		const content = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
+
+		// 如果已有卡片，尝试更新
+		if (this.currentCardMessageId) {
+			try {
+				const card = this.cardBuilder.buildStreamingCard(content);
+				await this.messageSender.updateCard(this.currentCardMessageId, card);
+				return;
+			} catch (error) {
+				this.logger?.error("Failed to update tool status card", undefined, error as Error);
+				this.currentCardMessageId = null;
+			}
 		}
 
-		// 更新卡片显示工具状态
-		const content = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
-		const card = this.cardBuilder.buildStreamingCard(content);
-		await this.messageSender.updateCard(this.currentCardMessageId!, card);
+		// 创建新卡片
+		try {
+			if (!this.thinkingStartTime) {
+				this.thinkingStartTime = Date.now();
+			}
+			const card = this.cardBuilder.buildStreamingCard(content);
+			const messageId = await this.messageSender.sendCard(this.chatId, card);
+			this.currentCardMessageId = messageId;
+		} catch (error) {
+			this.logger?.error("Failed to send tool status card", undefined, error as Error);
+		}
 	}
 
 	/**

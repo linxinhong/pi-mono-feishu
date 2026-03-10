@@ -287,6 +287,11 @@ export class CardBuilder {
 		// 转换链接
 		result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "[$1]($2)");
 
+		// 转义 @ 符号，防止被误解析为用户提及
+		// 飞书 lark_md 会将 @xxx 解析为用户提及，但 xxx 通常不是有效的用户 ID
+		// 匹配 @ 后面跟着字母、数字、下划线或中文的模式
+		result = result.replace(/@([a-zA-Z0-9_\u4e00-\u9fa5]+)/g, "\\@$1");
+
 		return result;
 	}
 
