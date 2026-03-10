@@ -268,14 +268,14 @@ ${memoryContent || "(no memory yet)"}
 		prompt += `## Tool Guidelines\n${bootContents.tools}\n\n`;
 	}
 
-	// 8. Soul（末尾）
-	if (bootContents?.soul) {
-		prompt += `## Core Rules\n${bootContents.soul}\n\n`;
+	// 8. 历史对话（如果有）
+	if (historyMarkdown) {
+		prompt += `## Recent Conversation\n${historyMarkdown}\n\n`;
 	}
 
-	// 9. 历史对话（如果有）
-	if (historyMarkdown) {
-		prompt += `## Recent Conversation\n${historyMarkdown}\n`;
+	// 9. Soul（末尾，核心规则）
+	if (bootContents?.soul) {
+		prompt += `## Core Rules\n${bootContents.soul}\n`;
 	}
 
 	// 保存 prompt 到频道目录（调试用）
