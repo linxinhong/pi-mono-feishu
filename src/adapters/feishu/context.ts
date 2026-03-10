@@ -361,7 +361,19 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 创建状态卡片 + 思考卡片 + 启动计时器
 	 */
 	async startThinking(): Promise<void> {
-		this.thinkingStartTime = Date.now();
+		const now = Date.now();
+		this.thinkingStartTime = now;
+		this.timerState.startTime = now;
+
+		// 重置状态
+		this.hideThinking = false; // 允许显示思考内容
+		this.thinkingContent = "";
+		this.toolCalls = [];
+		this.cardIds = {
+			statusCardId: null,
+			thinkingCardId: null,
+			toolCardId: null,
+		};
 
 		// 创建状态卡片
 		const statusCard = this.cardBuilder.buildStatusCard(undefined, "processing");
@@ -375,8 +387,6 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 更新状态
 		this.currentCardStatus = "thinking";
-		this.thinkingContent = "";
-		this.toolCalls = [];
 
 		// 启动计时器
 		this.startTimer();
@@ -487,7 +497,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
-	 * 开始工具调用
+	 * 开始工具调用（只在内存中记录，不显示卡片)
 	 */
 	async startToolCall(toolName: string, args?: Record<string, any>): Promise<void> {
 		this.toolCalls.push({
@@ -495,20 +505,11 @@ export class FeishuPlatformContext implements PlatformContext {
 			args: args,
 			status: "running",
 		});
-
-		// 如果是第一个工具调用，创建工具卡片
-		if (!this.cardIds.toolCardId) {
-			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls);
-			const messageId = await this.messageSender.sendCard(this.chatId, toolCard);
-			this.cardIds.toolCardId = messageId;
-		} else {
-			// 更新现有工具卡片
-			await this.updateToolCard();
-		}
+		// 不再在处理过程中创建/更新工具卡片
 	}
 
 	/**
-	 * 结束工具调用
+	 * 结束工具调用（只在内存中记录，不显示卡片)
 	 */
 	async endToolCall(toolName: string, success: boolean, result?: string): Promise<void> {
 		// 找到最近一个同名的 running 状态工具
@@ -517,9 +518,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCall.status = success ? "success" : "error";
 			toolCall.result = result;
 		}
-
-		// 更新工具卡片
-		await this.updateToolCard();
+		// 不再在处理过程中更新工具卡片
 	}
 
 	/**
