@@ -10,6 +10,7 @@ import type { LarkClient } from "./client/index.js";
 import type { FeishuStore } from "./store.js";
 import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
+import type { ToolCallInfo } from "./types.js";
 import { CardBuilder } from "./card/builder.js";
 
 // ============================================================================
@@ -51,8 +52,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	private thinkingStartTime: number | null = null;
 	private hideThinking: boolean = true;
 
-	// 累积的工具状态
-	private toolStatusLines: string[] = [];
+	// 累积的工具调用信息
+	private toolCalls: ToolCallInfo[] = [];
 
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
@@ -313,11 +314,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
-				const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
+				const card = this.cardBuilder.buildCompleteCard(content, { elapsed, toolCalls: this.toolCalls });
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "complete";
 				this.currentCardMessageId = null;
 				this.thinkingStartTime = null;
+				this.toolCalls = []; // 清空工具调用
 				this.pendingContent = ""; // 清空累积内容
 				return;
 			} catch (error) {
@@ -330,6 +332,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		await this.messageSender.sendText(this.chatId, content);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
+		this.toolCalls = [];
 		this.pendingContent = ""; // 清空累积内容
 	}
 
@@ -380,12 +383,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
-				const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
+				const card = this.cardBuilder.buildCompleteCard(content, { elapsed, toolCalls: this.toolCalls });
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "complete";
 				this.currentCardMessageId = null;
 				this.thinkingStartTime = null;
-				this.toolStatusLines = []; // 清空工具状态
+				this.toolCalls = []; // 清空工具调用
 				this.pendingContent = ""; // 清空累积内容
 				this._responseSent = true;
 				return;
@@ -399,7 +402,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		await this.messageSender.sendText(this.chatId, content);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
-		this.toolStatusLines = [];
+		this.toolCalls = [];
 		this.pendingContent = ""; // 清空累积内容
 		this._responseSent = true;
 	}
@@ -409,12 +412,101 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param statusText 状态文本，如 "-> 工具名" 或 "-> OK 工具名"
 	 */
 	async updateToolStatus(statusText: string): Promise<void> {
-		// 累积工具状态
-		this.toolStatusLines.push(statusText);
+		// 兼容旧接口：解析状态文本
+		// 格式可能是 "-> 工具名" 或 "-> OK 工具名" 或 "-> X 工具名"
+		const match = statusText.match(/^->\s*(OK|X)?\s*(.+)$/);
+		if (match) {
+			const [, status, toolName] = match;
+			if (status === "OK") {
+				// 工具成功完成
+				await this.endToolCall(toolName, true);
+			} else if (status === "X") {
+				// 工具失败
+				await this.endToolCall(toolName, false);
+			} else {
+				// 工具开始
+				await this.startToolCall(toolName);
+			}
+		}
+	}
+
+	/**
+	 * 开始工具调用
+	 */
+	async startToolCall(toolName: string, args?: Record<string, any>): Promise<void> {
+		this.toolCalls.push({
+			name: toolName,
+			args: args,
+			status: "running",
+		});
 
 		// 累积内容并使用节流更新
-		this.pendingContent = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
+		this.pendingContent = this.buildToolCallsContent();
 		await this.throttledCardUpdate();
+	}
+
+	/**
+	 * 结束工具调用
+	 */
+	async endToolCall(toolName: string, success: boolean, result?: string): Promise<void> {
+		// 找到最近一个同名的 running 状态工具
+		const toolCall = [...this.toolCalls].reverse().find(tc => tc.name === toolName && tc.status === "running");
+		if (toolCall) {
+			toolCall.status = success ? "success" : "error";
+			toolCall.result = result;
+		}
+
+		// 累积内容并使用节流更新
+		this.pendingContent = this.buildToolCallsContent();
+		await this.throttledCardUpdate();
+	}
+
+	/**
+	 * 构建工具调用内容
+	 */
+	private buildToolCallsContent(): string {
+		if (this.toolCalls.length === 0) {
+			return "";
+		}
+
+		const lines = this.toolCalls.map(tc => {
+			const statusIcon = tc.status === "success" ? "✅" :
+			                   tc.status === "error" ? "❌" :
+			                   tc.status === "running" ? "🔄" : "⏳";
+
+			// 格式化参数
+			const argsStr = tc.args ? this.formatToolArgs(tc.args) : "";
+			const argsDisplay = argsStr ? `: ${argsStr}` : "";
+
+			return `${statusIcon} \`${tc.name}\`${argsDisplay}`;
+		});
+
+		return `⚡ **工具调用**\n${lines.join("\n")}`;
+	}
+
+	/**
+	 * 格式化工具参数（简化显示）
+	 */
+	private formatToolArgs(args: Record<string, any>): string {
+		const keys = Object.keys(args).filter(k => !k.startsWith("_"));
+		if (keys.length === 0) return "";
+
+		// 对于 bash 工具，显示命令
+		if (args.command) {
+			const cmd = String(args.command);
+			return cmd.length > 50 ? cmd.substring(0, 50) + "..." : cmd;
+		}
+
+		// 对于 read 工具，显示文件路径
+		if (args.file_path) {
+			const path = String(args.file_path);
+			return path.split("/").pop() || path;
+		}
+
+		// 其他工具，显示第一个参数的值
+		const firstKey = keys[0];
+		const value = String(args[firstKey]);
+		return value.length > 50 ? value.substring(0, 50) + "..." : value;
 	}
 
 	/**

@@ -413,12 +413,16 @@ export class CoreAgent {
 					try {
 						if (agentEvent.type === "tool_execution_start") {
 							const args = agentEvent.args as Record<string, unknown>;
-							const label = (args.label as string) || agentEvent.toolName;
-							// 使用卡片更新工具状态，而不是发送新消息
-							if ((platformContext as any).updateToolStatus) {
+
+							// 使用新的结构化工具调用方法
+							if ((platformContext as any).startToolCall) {
+								await (platformContext as any).startToolCall(agentEvent.toolName, args);
+							} else if ((platformContext as any).updateToolStatus) {
+								// 兼容旧接口
+								const label = (args.label as string) || agentEvent.toolName;
 								await (platformContext as any).updateToolStatus(`-> ${label}`);
 							} else {
-								await platformContext.sendText(chatId, `_ -> ${label}_`);
+								await platformContext.sendText(chatId, `_ -> ${agentEvent.toolName}_`);
 							}
 
 							// 触发 tool:call hook
@@ -431,11 +435,19 @@ export class CoreAgent {
 								});
 							}
 						} else if (agentEvent.type === "tool_execution_end") {
-							const statusIcon = agentEvent.isError ? "X" : "OK";
-							// 使用卡片更新工具状态，而不是发送新消息
-							if ((platformContext as any).updateToolStatus) {
+							// 使用新的结构化工具调用方法
+							if ((platformContext as any).endToolCall) {
+								await (platformContext as any).endToolCall(
+									agentEvent.toolName,
+									!agentEvent.isError,
+									(agentEvent as any).result
+								);
+							} else if ((platformContext as any).updateToolStatus) {
+								// 兼容旧接口
+								const statusIcon = agentEvent.isError ? "X" : "OK";
 								await (platformContext as any).updateToolStatus(`-> ${statusIcon} ${agentEvent.toolName}`);
 							} else {
+								const statusIcon = agentEvent.isError ? "X" : "OK";
 								await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
 							}
 

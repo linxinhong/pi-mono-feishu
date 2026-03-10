@@ -80,21 +80,23 @@ export class CardBuilder {
 	buildStreamingCard(content: string, toolCalls?: ToolCallInfo[]): Card {
 		const elements: CardElement[] = [];
 
-		// 添加主要内容
-		elements.push({
-			tag: "div",
-			text: {
-				tag: "lark_md",
-				content: this.formatContent(content),
-			},
-		});
-
-		// 添加工具调用状态
+		// 1. 工具调用区域（如果有）
 		if (toolCalls && toolCalls.length > 0) {
-			elements.push(this.buildToolCallsSection(toolCalls));
+			elements.push(this.buildToolCallsList(toolCalls));
 		}
 
-		// 添加状态指示
+		// 2. 主要内容区域（如果有）
+		if (content && content.trim()) {
+			elements.push({
+				tag: "div",
+				text: {
+					tag: "lark_md",
+					content: this.formatContent(content),
+				},
+			});
+		}
+
+		// 3. 状态指示
 		elements.push({
 			tag: "markdown",
 			content: "⏳ 正在生成...",
@@ -199,24 +201,51 @@ export class CardBuilder {
 	// ========================================================================
 
 	/**
-	 * 构建工具调用状态区域
+	 * 构建工具调用列表（带参数显示）
 	 */
-	private buildToolCallsSection(toolCalls: ToolCallInfo[]): CardElement {
-		const toolElements = toolCalls.map((tc) => {
+	private buildToolCallsList(toolCalls: ToolCallInfo[]): CardElement {
+		const lines = toolCalls.map(tc => {
 			const statusIcon = this.getToolStatusIcon(tc.status);
-			return {
-				tag: "div",
-				text: {
-					tag: "lark_md",
-					content: `${statusIcon} \`${tc.name}\``,
-				},
-			};
+
+			// 格式化参数（简化显示）
+			const argsStr = tc.args ? this.formatArgs(tc.args) : "";
+			const argsDisplay = argsStr ? `: ${argsStr}` : "";
+
+			return `${statusIcon} \`${tc.name}\`${argsDisplay}`;
 		});
 
 		return {
 			tag: "div",
-			fields: toolElements,
+			text: {
+				tag: "lark_md",
+				content: `⚡ **工具调用**\n${lines.join("\n")}`,
+			},
 		};
+	}
+
+	/**
+	 * 格式化参数（简化显示）
+	 */
+	private formatArgs(args: Record<string, any>): string {
+		const keys = Object.keys(args).filter(k => !k.startsWith("_"));
+		if (keys.length === 0) return "";
+
+		// 对于 bash 工具，显示命令
+		if (args.command) {
+			const cmd = String(args.command);
+			return cmd.length > 50 ? cmd.substring(0, 50) + "..." : cmd;
+		}
+
+		// 对于 read 工具，显示文件路径
+		if (args.file_path) {
+			const path = String(args.file_path);
+			return path.split("/").pop() || path;
+		}
+
+		// 其他工具，显示第一个参数的值
+		const firstKey = keys[0];
+		const value = String(args[firstKey]);
+		return value.length > 50 ? value.substring(0, 50) + "..." : value;
 	}
 
 	/**
