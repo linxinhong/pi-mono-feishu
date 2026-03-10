@@ -77,6 +77,8 @@ interface AgentState {
 		skillsMtime: number;
 		memoryMtime: number;
 	} | null;
+	/** session 订阅的取消函数 */
+	unsubscribe: (() => void) | null;
 }
 
 /**
@@ -276,7 +278,7 @@ export class CoreAgent {
 
 		// 创建初始状态
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
 			channelStates.set(channelId, state);
 		}
 
@@ -337,7 +339,7 @@ export class CoreAgent {
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
 			channelStates.set(chatId, state);
 		}
 
@@ -400,7 +402,14 @@ export class CoreAgent {
 			// 订阅事件并响应
 			let finalResponse = "";
 			const responsePromise = new Promise<string>((resolve) => {
-				session.subscribe(async (agentEvent) => {
+				// 取消之前的订阅（如果存在），防止订阅泄漏
+				if (state.unsubscribe) {
+					state.unsubscribe();
+					state.unsubscribe = null;
+				}
+
+				// 订阅事件并保存取消函数
+				state.unsubscribe = session.subscribe(async (agentEvent) => {
 					try {
 						if (agentEvent.type === "tool_execution_start") {
 							const args = agentEvent.args as Record<string, unknown>;
