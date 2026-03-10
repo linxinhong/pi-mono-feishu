@@ -128,7 +128,7 @@ async function preloadTools(): Promise<void> {
 		import("../tools/models.js"),
 		import("../tools/glob.js"),
 		import("../tools/grep.js"),
-		import("../tools/spawn.js"),
+		import("../tools/spawn/index.js"),
 		import("../tools/rtk.js"),
 	]);
 
@@ -597,10 +597,11 @@ export class CoreAgent {
 		const { createModelsTool } = await import("../tools/models.js");
 		const { createGlobTool } = await import("../tools/glob.js");
 		const { createGrepTool } = await import("../tools/grep.js");
-		const { createSpawnTool } = await import("../tools/spawn.js");
+		const { createSpawnTool } = await import("../tools/spawn/index.js");
 		const { createRtkTool } = await import("../tools/rtk.js");
 
-		const tools = [
+		// 先创建基础工具（不包括 spawn，因为 spawn 需要知道 parentTools）
+		const baseTools: AgentTool<any>[] = [
 			createBashTool(this.config.executor),
 			createReadTool(this.config.executor),
 			createWriteTool(this.config.executor),
@@ -612,11 +613,6 @@ export class CoreAgent {
 			}),
 			createGlobTool(this.config.executor),
 			createGrepTool(this.config.executor),
-			createSpawnTool({
-				executor: this.config.executor,
-				modelManager: this.config.modelManager,
-				workspaceDir: workspacePath,
-			}),
 			createRtkTool(this.config.executor),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, state.channelMemoryStore, workspacePath),
@@ -624,7 +620,7 @@ export class CoreAgent {
 			...(this.config.eventsWatcher ? getAllEventTools(this.config.eventsWatcher, chatId) : []),
 		].filter(Boolean);
 
-		// 添加平台特定工具
+		// 添加平台特定工具到基础工具
 		if (platformContext.getTools) {
 			try {
 				const platformTools = await platformContext.getTools({
@@ -633,13 +629,25 @@ export class CoreAgent {
 					channelDir,
 				});
 				if (platformTools && platformTools.length > 0) {
-					tools.push(...platformTools);
+					baseTools.push(...platformTools);
 					log.logInfo(`[Agent] Added ${platformTools.length} platform tools for ${platformContext.platform}`);
 				}
 			} catch (error) {
 				log.logError(`[Agent] Failed to load platform tools: ${error}`);
 			}
 		}
+
+		// 创建 spawn 工具，传入所有已创建的工具作为 parentTools
+		const spawnTool = createSpawnTool({
+			executor: this.config.executor,
+			modelManager: this.config.modelManager,
+			workspaceDir: workspacePath,
+			channelDir: channelDir,
+			parentTools: baseTools,
+		});
+
+		// 最终工具列表 = 基础工具 + spawn 工具
+		const tools = [...baseTools, spawnTool];
 
 		// 验证工具不为空
 		if (tools.length === 0) {
