@@ -49,9 +49,36 @@ export class CardBuilder {
 	};
 
 	/**
-	 * 构建思考中状态卡片
+	 * 构建状态卡片（带计时器）
+	 * @param elapsed 已耗时（毫秒）
+	 * @param status 状态：processing 或 complete
 	 */
-	buildThinkingCard(): Card {
+	buildStatusCard(elapsed?: number, status?: "processing" | "complete"): Card {
+		const statusIcon = status === "complete" ? "😊" : "🤔";
+		const timeDisplay = elapsed !== undefined
+			? ` (${this.formatElapsedTime(elapsed)})`
+			: "……";
+
+		return {
+			schema: "2.0",
+			config: this.defaultConfig,
+			body: {
+				elements: [{
+					tag: "div",
+					text: {
+						tag: "plain_text",
+						content: `${statusIcon} 处理中${timeDisplay}`,
+					},
+				}],
+			},
+		};
+	}
+
+	/**
+	 * 构建思考内容卡片
+	 * @param content 思考内容
+	 */
+	buildThinkingContentCard(content: string): Card {
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
@@ -60,18 +87,34 @@ export class CardBuilder {
 					{
 						tag: "div",
 						text: {
-							tag: "plain_text",
-							content: "🤔 思考中...",
+							tag: "lark_md",
+							content: this.formatContent(content),
 						},
-					},
-					{
-						tag: "markdown",
-						content: "正在处理您的请求，请稍候...",
-						text_size: "notation",
 					},
 				],
 			},
 		};
+	}
+
+	/**
+	 * 构建工具调用卡片
+	 * @param toolCalls 工具调用列表
+	 */
+	buildToolCallsCard(toolCalls: ToolCallInfo[]): Card {
+		return {
+			schema: "2.0",
+			config: this.defaultConfig,
+			body: {
+				elements: [this.buildToolCallsList(toolCalls)],
+			},
+		};
+	}
+
+	/**
+	 * 构建思考中状态卡片（兼容旧接口）
+	 */
+	buildThinkingCard(): Card {
+		return this.buildStatusCard(undefined, "processing");
 	}
 
 	/**
@@ -331,7 +374,18 @@ export class CardBuilder {
 	}
 
 	/**
-	 * 格式化耗时
+	 * 格式化耗时（MM:SS 格式）
+	 * @param ms 毫秒数
+	 */
+	formatElapsedTime(ms: number): string {
+		const totalSeconds = Math.floor(ms / 1000);
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+	}
+
+	/**
+	 * 格式化耗时（兼容旧接口）
 	 */
 	private formatElapsed(ms: number): string {
 		if (ms < 1000) {

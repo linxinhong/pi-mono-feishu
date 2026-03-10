@@ -406,3 +406,29 @@ export interface DedupConfig {
 	/** 过期时间（毫秒） */
 	ttl?: number;
 }
+
+// ============================================================================
+// Multi-Card Types
+// ============================================================================
+
+/**
+ * 多卡片 ID 管理
+ */
+export interface MultiCardIds {
+	/** 状态卡片 ID */
+	statusCardId: string | null;
+	/** 思考卡片 ID */
+	thinkingCardId: string | null;
+	/** 工具卡片 ID */
+	toolCardId: string | null;
+}
+
+/**
+ * 计时器状态
+ */
+export interface TimerState {
+	/** 开始时间 */
+	startTime: number | null;
+	/** 定时器 ID */
+	intervalId: NodeJS.Timeout | null;
+}
