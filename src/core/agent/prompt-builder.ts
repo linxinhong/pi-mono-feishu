@@ -4,7 +4,7 @@
  * 提示词构建器 - 为 Agent 构建系统提示词
  */
 
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { AgentContext } from "./context.js";
 import type { Skill } from "@mariozechner/pi-coding-agent";
@@ -82,6 +82,7 @@ export function buildSystemPrompt(
 	context: AgentContext,
 	skills: Skill[],
 	memoryContent: string,
+	channelDir?: string,
 ): string {
 	const { workspaceDir, chatId, channels, users } = context;
 
@@ -156,6 +157,18 @@ ${memoryContent || "(no memory yet)"}
 
 Each tool requires a "label" parameter (shown to user).
 `;
+
+	// 保存 prompt 到频道目录（调试用）
+	if (channelDir) {
+		const promptPath = join(channelDir, "system-prompt.md");
+		try {
+			writeFileSync(promptPath, prompt, "utf-8");
+		} catch {
+			// 忽略写入错误
+		}
+	}
+
+	return prompt;
 }
 
 /**

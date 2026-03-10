@@ -671,7 +671,7 @@ export class CoreAgent {
 			attachments: [],
 			timestamp: message.timestamp.toISOString(),
 		};
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir);
 
 		// 触发 SYSTEM_PROMPT_BUILD hook
 		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
@@ -808,7 +808,7 @@ export class CoreAgent {
 			timestamp: "",
 		};
 
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir);
 
 		// 触发 SYSTEM_PROMPT_BUILD hook
 		const hookManager = this.config.hookManager;
