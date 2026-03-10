@@ -68,6 +68,7 @@ interface AgentState {
 	sessionManager: SessionManager | null;
 	modelRegistry: ModelRegistry | null;
 	memoryStore: MemoryStore | null;
+	channelMemoryStore: MemoryStore | null;
 	settingsManager: SettingsManager | null;
 	tools: AgentTool<any>[];
 	processing: boolean;
@@ -278,7 +279,7 @@ export class CoreAgent {
 
 		// 创建初始状态
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, channelMemoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
 			channelStates.set(channelId, state);
 		}
 
@@ -339,7 +340,7 @@ export class CoreAgent {
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, channelMemoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null, unsubscribe: null };
 			channelStates.set(chatId, state);
 		}
 
@@ -569,9 +570,14 @@ export class CoreAgent {
 			});
 		}
 
-		// 创建或获取 MemoryStore
+		// 创建或获取全局 MemoryStore
 		if (!state.memoryStore) {
 			state.memoryStore = new MemoryStore(workspacePath);
+		}
+
+		// 创建频道 MemoryStore
+		if (!state.channelMemoryStore) {
+			state.channelMemoryStore = new MemoryStore(channelDir, true);
 		}
 
 		// 验证工具依赖
@@ -612,7 +618,7 @@ export class CoreAgent {
 			}),
 			createRtkTool(this.config.executor),
 			// 添加 memory 工具
-			...getAllMemoryTools(state.memoryStore, workspacePath),
+			...getAllMemoryTools(state.memoryStore, state.channelMemoryStore, workspacePath),
 			// 添加 event 工具（如果 eventsWatcher 可用）
 			...(this.config.eventsWatcher ? getAllEventTools(this.config.eventsWatcher, chatId) : []),
 		].filter(Boolean);

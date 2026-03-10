@@ -13,8 +13,14 @@ import { join } from "path";
 export class MemoryStore {
 	private memoryPath: string;
 
-	constructor(workspaceDir: string) {
-		this.memoryPath = join(workspaceDir, "memory", "memory.md");
+	constructor(baseDir: string, isChannel = false) {
+		if (isChannel) {
+			// 频道记忆：channelDir/MEMORY.md
+			this.memoryPath = join(baseDir, "MEMORY.md");
+		} else {
+			// 全局记忆：workspaceDir/memory/memory.md
+			this.memoryPath = join(baseDir, "memory", "memory.md");
+		}
 		this.ensureDir();
 	}
 

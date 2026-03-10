@@ -163,14 +163,131 @@ export function createMemoryAppendDailyTool(workspaceDir: string): AgentTool<typ
 	};
 }
 
+// ============================================================================
+// Channel Memory Save Tool
+// ============================================================================
+
+const ChannelMemorySaveSchema = Type.Object({
+	content: Type.String({ description: "Information to save to channel memory" }),
+	label: Type.String({ description: "Short label shown to user" }),
+});
+type ChannelMemorySaveParams = Static<typeof ChannelMemorySaveSchema>;
+
+export function createChannelMemorySaveTool(channelStore: MemoryStore): AgentTool<typeof ChannelMemorySaveSchema> {
+	return {
+		name: "channel_memory_save",
+		label: "Channel Memory Save",
+		description: "Save information to this channel's memory. Use for channel-specific context that should persist across conversations in this channel.",
+		parameters: ChannelMemorySaveSchema,
+		execute: async (_toolCallId, params: ChannelMemorySaveParams, _signal, _onUpdate) => {
+			const { content } = params;
+			try {
+				channelStore.append(content);
+				return {
+					content: [{ type: "text", text: `Saved to channel memory: ${content.substring(0, 100)}...` }],
+					details: { saved: true },
+				};
+			} catch (error: any) {
+				return {
+					content: [{ type: "text", text: `Error: ${error.message}` }],
+					details: { error: error.message },
+				};
+			}
+		},
+	};
+}
+
+// ============================================================================
+// Channel Memory Recall Tool
+// ============================================================================
+
+const ChannelMemoryRecallSchema = Type.Object({
+	query: Type.String({ description: "Search query" }),
+	label: Type.String({ description: "Short label shown to user" }),
+});
+type ChannelMemoryRecallParams = Static<typeof ChannelMemoryRecallSchema>;
+
+export function createChannelMemoryRecallTool(channelStore: MemoryStore): AgentTool<typeof ChannelMemoryRecallSchema> {
+	return {
+		name: "channel_memory_recall",
+		label: "Channel Memory Recall",
+		description: "Search and retrieve information from this channel's memory. Use to recall channel-specific context.",
+		parameters: ChannelMemoryRecallSchema,
+		execute: async (_toolCallId, params: ChannelMemoryRecallParams, _signal, _onUpdate) => {
+			const { query } = params;
+			try {
+				const results = channelStore.search(query);
+				if (results.length === 0) {
+					return {
+						content: [{ type: "text", text: "No matching channel memories found." }],
+						details: { count: 0 },
+					};
+				}
+				return {
+					content: [{ type: "text", text: results.slice(0, 10).join("\n\n---\n\n") }],
+					details: { count: results.length },
+				};
+			} catch (error: any) {
+				return {
+					content: [{ type: "text", text: `Error: ${error.message}` }],
+					details: { error: error.message },
+				};
+			}
+		},
+	};
+}
+
+// ============================================================================
+// Channel Memory Forget Tool
+// ============================================================================
+
+const ChannelMemoryForgetSchema = Type.Object({
+	pattern: Type.String({ description: "Pattern to match and remove" }),
+	label: Type.String({ description: "Short label shown to user" }),
+});
+type ChannelMemoryForgetParams = Static<typeof ChannelMemoryForgetSchema>;
+
+export function createChannelMemoryForgetTable(channelStore: MemoryStore): AgentTool<typeof ChannelMemoryForgetSchema> {
+	return {
+		name: "channel_memory_forget",
+		label: "Channel Memory Forget",
+		description: "Remove information from this channel's memory by pattern.",
+		parameters: ChannelMemoryForgetSchema,
+		execute: async (_toolCallId, params: ChannelMemoryForgetParams, _signal, _onUpdate) => {
+			const { pattern } = params;
+			try {
+				const removed = channelStore.forget(pattern);
+				return {
+					content: [{ type: "text", text: `Removed ${removed} lines from channel memory.` }],
+					details: { removedLines: removed },
+				};
+			} catch (error: any) {
+				return {
+					content: [{ type: "text", text: `Error: ${error.message}` }],
+					details: { error: error.message },
+				};
+			}
+		},
+	};
+}
+
 /**
  * 获取所有记忆工具
  */
-export function getAllMemoryTools(store: MemoryStore, workspaceDir: string): AgentTool<any>[] {
+export function getAllMemoryTools(
+	globalStore: MemoryStore,
+	channelStore: MemoryStore,
+	workspaceDir: string
+): AgentTool<any>[] {
 	return [
-		createMemorySaveTool(store),
-		createMemoryRecallTool(store),
-		createMemoryForgetTable(store),
+		// 全局记忆工具
+		createMemorySaveTool(globalStore),
+		createMemoryRecallTool(globalStore),
+		createMemoryForgetTable(globalStore),
 		createMemoryAppendDailyTool(workspaceDir),
+		// 频道记忆工具
+		createChannelMemorySaveTool(channelStore),
+		createChannelMemoryRecallTool(channelStore),
+		createChannelMemoryForgetTable(channelStore),
 	];
 }
