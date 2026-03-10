@@ -49,7 +49,8 @@ const CACHE_TTL = 30000;
  * 过滤掉无效信息，节省 token：
  * - 跳过文件头部说明（以 > 开头的引用块）
  * - 跳过未选中的 checkbox
- * - 跳过占位符行
+ * - 跳过占位符行（包含 [xxx] 格式的占位符）
+ * - 跳过"请填写"等提示行
  * - 保留已选中的 checkbox，移除 checkbox 标记
  */
 function sanitizeBootContent(content: string): string {
@@ -77,8 +78,13 @@ function sanitizeBootContent(content: string): string {
 		// 跳过未选中的 checkbox
 		if (line.match(/^\s*- \[ \]/)) continue;
 
-		// 跳过占位符行
-		if (/\[你的|\[请|\[项目|\[React/.test(line)) continue;
+		// 跳过占位符行（包含 [中文占位符] 或 [English placeholder]）
+		// 匹配: [你的xxx], [请xxx], [项目xxx], [希望xxx], [React], [xxx名称], [xxx路径] 等
+		if (/\[(你的|请|项目|希望|React|[a-zA-Z\s]+(?:名称|路径|描述|配置))\]/.test(line)) continue;
+		if (/\[[\u4e00-\u9fa5]+\]/.test(line) && !line.includes('MEMORY.md')) continue;
+
+		// 跳过"请填写"提示行
+		if (line.includes('请填写')) continue;
 
 		// 保留已选中的 checkbox，移除标记
 		const checkedMatch = line.match(/^(\s*)- \[x\] (.+)$/);

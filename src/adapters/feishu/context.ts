@@ -71,6 +71,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 累积的工具调用信息
 	private toolCalls: ToolCallInfo[] = [];
 
+	// 工具卡片创建锁（防止并发创建多张卡片）
+	private toolCardCreating: boolean = false;
+
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
@@ -369,6 +372,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.hideThinking = false; // 允许显示思考内容
 		this.thinkingContent = "";
 		this.toolCalls = [];
+		this.toolCardCreating = false; // 重置工具卡片创建锁
 		this.cardIds = {
 			statusCardId: null,
 			thinkingCardId: null,
@@ -512,6 +516,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 更新或创建工具卡片
+	 * 使用锁机制防止并发创建多张卡片
 	 */
 	private async updateOrCreateToolCard(): Promise<void> {
 		if (this.toolCalls.length === 0) return;
@@ -522,11 +527,17 @@ export class FeishuPlatformContext implements PlatformContext {
 			if (this.cardIds.toolCardId) {
 				// 更新现有卡片
 				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
-			} else {
-				// 创建新卡片
-				const messageId = await this.messageSender.sendCard(this.chatId, toolCard);
-				this.cardIds.toolCardId = messageId;
+			} else if (!this.toolCardCreating) {
+				// 创建新卡片（加锁防止并发）
+				this.toolCardCreating = true;
+				try {
+					const messageId = await this.messageSender.sendCard(this.chatId, toolCard);
+					this.cardIds.toolCardId = messageId;
+				} finally {
+					this.toolCardCreating = false;
+				}
 			}
+			// 如果正在创建中，跳过本次更新（下一次调用会更新）
 		} catch (error: any) {
 			// 检查是否是速率限制错误 (230020)
 			if (error?.code === 230020) {
