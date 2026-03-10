@@ -405,7 +405,12 @@ export class CoreAgent {
 						if (agentEvent.type === "tool_execution_start") {
 							const args = agentEvent.args as Record<string, unknown>;
 							const label = (args.label as string) || agentEvent.toolName;
-							await platformContext.sendText(chatId, `_ -> ${label}_`);
+							// 使用卡片更新工具状态，而不是发送新消息
+							if ((platformContext as any).updateToolStatus) {
+								await (platformContext as any).updateToolStatus(`-> ${label}`);
+							} else {
+								await platformContext.sendText(chatId, `_ -> ${label}_`);
+							}
 
 							// 触发 tool:call hook
 							if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALL)) {
@@ -418,7 +423,12 @@ export class CoreAgent {
 							}
 						} else if (agentEvent.type === "tool_execution_end") {
 							const statusIcon = agentEvent.isError ? "X" : "OK";
-							await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
+							// 使用卡片更新工具状态，而不是发送新消息
+							if ((platformContext as any).updateToolStatus) {
+								await (platformContext as any).updateToolStatus(`-> ${statusIcon} ${agentEvent.toolName}`);
+							} else {
+								await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
+							}
 
 							// 触发 tool:called hook
 							if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALLED)) {

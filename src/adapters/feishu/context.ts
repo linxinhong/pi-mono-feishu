@@ -51,6 +51,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	private thinkingStartTime: number | null = null;
 	private hideThinking: boolean = true;
 
+	// 累积的工具状态
+	private toolStatusLines: string[] = [];
+
 	constructor(options: FeishuPlatformContextOptions) {
 		this.chatId = options.chatId;
 		this.larkClient = options.larkClient;
@@ -238,6 +241,27 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.currentCardStatus = "complete";
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
+		this.toolStatusLines = []; // 清空工具状态
+	}
+
+	/**
+	 * 更新工具执行状态（在卡片上显示）
+	 * @param statusText 状态文本，如 "-> 工具名" 或 "-> OK 工具名"
+	 */
+	async updateToolStatus(statusText: string): Promise<void> {
+		// 累积工具状态
+		this.toolStatusLines.push(statusText);
+
+		if (!this.currentCardMessageId) {
+			// 如果没有卡片，创建一个
+			this.thinkingStartTime = Date.now();
+			await this.showThinking();
+		}
+
+		// 更新卡片显示工具状态
+		const content = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
+		const card = this.cardBuilder.buildStreamingCard(content);
+		await this.messageSender.updateCard(this.currentCardMessageId!, card);
 	}
 
 	/**
