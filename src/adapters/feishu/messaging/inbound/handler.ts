@@ -105,6 +105,7 @@ export class MessageHandler {
 
 		// 缓存 mention 信息（用于 @ 功能）
 		this.logger?.debug("Processing mentions", { mentions: context.mentions });
+		let permissionError: { scopes: string; url: string } | undefined;
 		if (context.mentions) {
 			for (const mention of context.mentions) {
 				this.logger?.debug("Processing mention", { mention });
@@ -115,7 +116,15 @@ export class MessageHandler {
 					if (!realName || realName.startsWith("_user_")) {
 						const userName = await this.larkClient.getUserName(mention.open_id);
 						this.logger?.debug("Fetched user name from API", { userName, open_id: mention.open_id });
-						if (userName) {
+						
+						// 检查是否是权限错误
+						if (userName?.startsWith("[PERMISSION_ERROR:")) {
+							const match = userName.match(/\[PERMISSION_ERROR:scopes=([^:]+):url=([^\]]+)\]/);
+							if (match) {
+								permissionError = { scopes: match[1], url: match[2] };
+								this.logger?.warn("Permission error detected", permissionError);
+							}
+						} else if (userName) {
 							realName = userName;
 							mention.name = userName; // 更新 mention 的 name
 						}
@@ -125,12 +134,17 @@ export class MessageHandler {
 						this.larkClient.addUserToCache(context.chatId, mention.key, mention.open_id);
 						this.logger?.debug("Added mention key to cache", { chatId: context.chatId, key: mention.key, open_id: mention.open_id });
 					}
-					if (realName) {
+					if (realName && !realName.startsWith("[PERMISSION_ERROR")) {
 						this.larkClient.addUserToCache(context.chatId, realName, mention.open_id);
 						this.logger?.debug("Added user name to cache", { chatId: context.chatId, realName, open_id: mention.open_id });
 					}
 				}
 			}
+		}
+
+		// 如果有权限错误，发送授权卡片
+		if (permissionError) {
+			await this.sendPermissionCard(context.chatId, permissionError.scopes, permissionError.url);
 		}
 
 		// 提取提及的用户 ID
@@ -186,6 +200,66 @@ export class MessageHandler {
 			return userInfo || {};
 		} catch {
 			return {};
+		}
+	}
+
+	/**
+	 * 发送权限授权卡片
+	 */
+	private async sendPermissionCard(chatId: string, scopes: string, grantUrl: string): Promise<void> {
+		this.logger?.info("Sending permission grant card", { chatId, scopes, grantUrl });
+		
+		const card = {
+			schema: "2.0",
+			config: { wide_screen_mode: true },
+			header: {
+				title: { tag: "plain_text", content: "🔐 需要授权才能使用 @ 功能" },
+				template: "orange",
+			},
+			body: {
+				elements: [
+					{
+						tag: "markdown",
+						content: `应用缺少以下权限：\n\`\`\`\n${scopes}\n\`\`\`\n\n请点击下方按钮前往授权：`,
+					},
+					{
+						tag: "column_set",
+						flex_mode: "none",
+						horizontal_align: "center",
+						columns: [
+							{
+								tag: "column",
+								width: "auto",
+								elements: [
+									{
+										tag: "button",
+										text: { tag: "plain_text", content: "前往授权" },
+										type: "primary",
+										size: "medium",
+										multi_url: {
+											url: grantUrl,
+											pc_url: grantUrl,
+											android_url: grantUrl,
+											ios_url: grantUrl,
+										},
+									},
+								],
+							},
+						],
+					},
+					{
+						tag: "markdown",
+						content: "<font color='grey'>授权后，@ 功能将正常工作</font>",
+						text_size: "notation",
+					},
+				],
+			},
+		};
+
+		try {
+			await this.larkClient.sendCard(chatId, card);
+		} catch (error) {
+			this.logger?.error("Failed to send permission card", undefined, error as Error);
 		}
 	}
 

@@ -783,6 +783,7 @@ export class LarkClient {
 	/**
 	 * 获取用户真实姓名
 	 * @param openId 用户 open_id
+	 * @returns 用户名，如果缺少权限则返回包含授权链接的特殊字符串
 	 */
 	async getUserName(openId: string): Promise<string | undefined> {
 		// 检查缓存
@@ -804,7 +805,22 @@ export class LarkClient {
 				this.userNameCacheTime.set(openId, Date.now());
 				return name;
 			}
-		} catch (error) {
+		} catch (error: any) {
+			// 检查是否是权限错误 (code 99991672)
+			const errorCode = error?.code ?? error?.response?.data?.code;
+			const errorMsg = error?.msg ?? error?.response?.data?.msg ?? String(error);
+			
+			if (errorCode === 99991672) {
+				this.logger?.warn("Permission denied for getUserName", { openId, errorMsg });
+				// 导入 permission-url 工具
+				const { extractPermissionGrantUrl, extractPermissionScopes } = await import("../utils/permission-url.js");
+				const grantUrl = extractPermissionGrantUrl(errorMsg);
+				const scopes = extractPermissionScopes(errorMsg);
+				
+				// 返回特殊标记，让上层知道需要显示授权卡片
+				return `[PERMISSION_ERROR:scopes=${scopes}:url=${grantUrl}]`;
+			}
+			
 			this.logger?.warn("Failed to get user name", { openId, error: String(error) });
 		}
 
