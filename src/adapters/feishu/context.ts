@@ -167,6 +167,17 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 发送卡片消息
 	 */
 	async sendCard(chatId: string, card: any): Promise<string> {
+		// 转换卡片内容中的 @用户名
+		if (card?.body?.elements) {
+			for (const element of card.body.elements) {
+				if (element.text?.content) {
+					element.text.content = await this.larkClient.convertAtMentions(chatId, element.text.content);
+				}
+				if (element.content) {
+					element.content = await this.larkClient.convertAtMentions(chatId, element.content);
+				}
+			}
+		}
 		return await this.messageSender.sendCard(chatId, card);
 	}
 
