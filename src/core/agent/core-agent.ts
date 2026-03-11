@@ -992,7 +992,7 @@ export class CoreAgent {
 						data,
 					});
 				} catch (error) {
-					log.logWarninging(`[Agent] Failed to read image: ${attachment.localPath}`);
+					log.logWarning(`[Agent] Failed to read image: ${attachment.localPath}`);
 				}
 			}
 		}
