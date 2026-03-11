@@ -33,26 +33,24 @@
    - 通过 claw 命令在远程服务器执行 git pull
    - 服务器路径：`~/pi-claw`
 
-## 注意事项
-
-- 执行前会询问用户确认
-- 如果工作区有未提交的更改，会提示用户
-- 需要确保本地 git 配置正确
-- 需要确保 claw 命令可用且有服务器访问权限
-
 ## 关于 `claw` 命令
 
-`claw` 是一个自定义 alias，本质是 `ssh` 命令的封装：
+`claw` 是一个 shell alias，**本质就是 ssh 命令**：
 
 ```bash
-# ~/.zshrc 或 ~/.bashrc 中定义
-alias claw='ssh username@server-hostname'
+# ~/.zshrc 或 ~/.bashrc 中的实际配置示例：
+alias claw='ssh user@hostname'
+
+# 实际使用时：
+claw "cd ~/pi-claw && git pull"
+# 等价于：
+ssh user@hostname "cd ~/pi-claw && git pull"
 ```
 
-这样设计的好处：
-- 简化 SSH 操作，无需输入完整用户名和主机名
-- 命令更简短易记
-- 统一的服务器访问入口
+**关键点**：
+- `claw` 不是一个独立工具，而是 `ssh` 的别名
+- 它直接转发所有参数给 ssh
+- 用于简化 SSH 命令输入
 
 ## 日志路径
 
@@ -84,6 +82,13 @@ claw "tail -f ~/pi-claw/logs/pi-claw.log"
 
 - 本地仓库已初始化 git
 - 已配置远程仓库
-- 已配置 `claw` alias（指向目标服务器的 SSH 连接）
+- 已配置 `claw` alias（即配置好指向目标服务器的 SSH alias）
 - 服务器端 `~/pi-claw` 目录存在且为 git 仓库
 - 已配置 SSH 免密登录（推荐）
+
+## 注意事项
+
+- 执行前会询问用户确认
+- 如果工作区有未提交的更改，会提示用户
+- 需要确保本地 git 配置正确
+- 如果当前环境没有 `claw` alias，需要提示用户手动执行服务器拉取

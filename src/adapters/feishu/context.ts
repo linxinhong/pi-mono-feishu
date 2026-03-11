@@ -495,6 +495,8 @@ export class FeishuPlatformContext implements PlatformContext {
 					expanded: false,  // 完成时折叠
 				});
 				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
+				// 标记响应已发送，防止 unified-bot 重复发送
+				this._responseSent = true;
 			} catch (error: any) {
 				const errorMsg = String(error?.message || error);
 				const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
