@@ -368,7 +368,7 @@ export class CardBuilder {
 			header: {
 				title: { tag: "plain_text", content: "📋 处理流程" },
 			},
-			body: {
+			expanded_content: {
 				elements: [{
 					tag: "div",
 					text: { tag: "lark_md", content: turnLines.join("\n") },
