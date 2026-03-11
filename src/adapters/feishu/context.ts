@@ -77,6 +77,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
+	// 引用的消息 ID（用于引用回复原消息）
+	private quoteMessageId: string | null = null;
+
 	// 节流相关
 	private lastCardUpdateTime: number = 0;
 	private pendingFlushTimer: NodeJS.Timeout | null = null;
@@ -388,10 +391,14 @@ export class FeishuPlatformContext implements PlatformContext {
 	/**
 	 * 开始思考（发送工具卡片）
 	 * 只创建一张工具卡片（包含 timeline）
+	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
-	async startThinking(): Promise<void> {
+	async startThinking(quoteMessageId?: string): Promise<void> {
 		const now = Date.now();
 		this.thinkingStartTime = now;
+
+		// 保存引用消息 ID
+		this.quoteMessageId = quoteMessageId || null;
 
 		// 重置状态
 		this.hideThinking = false; // 允许显示思考内容
@@ -406,9 +413,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCardId: null,
 		};
 
-		// 只创建一张工具卡片（初始为空）
+		// 只创建一张工具卡片（初始为空），传递 quoteMessageId 引用原消息
 		const initialCard = this.cardBuilder.buildToolCallsCard([], []);
-		const messageId = await this.messageSender.sendCard(this.chatId, initialCard);
+		const messageId = await this.messageSender.sendCard(this.chatId, initialCard, this.quoteMessageId || undefined);
 		this.cardIds.toolCardId = messageId;
 
 		// 更新状态

@@ -122,10 +122,13 @@ export class MessageSender {
 
 	/**
 	 * 发送卡片消息
+	 * @param chatId 聊天 ID
+	 * @param card 卡片内容
+	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
-	async sendCard(chatId: string, card: CardContent | any): Promise<string> {
-		this.logger?.debug("Sending card message", { chatId });
-		const result = await this.larkClient.sendCard(chatId, card);
+	async sendCard(chatId: string, card: CardContent | any, quoteMessageId?: string): Promise<string> {
+		this.logger?.debug("Sending card message", { chatId, quoteMessageId });
+		const result = await this.larkClient.sendCard(chatId, card, quoteMessageId);
 		return result.message_id;
 	}
 

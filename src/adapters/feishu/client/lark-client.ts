@@ -259,19 +259,29 @@ export class LarkClient {
 
 	/**
 	 * 发送卡片消息
+	 * @param receiveId 接收者 ID
+	 * @param card 卡片内容
+	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
-	async sendCard(receiveId: string, card: any): Promise<FeishuSendResult> {
-		this.logger?.debug("Sending card message", { receiveId });
+	async sendCard(receiveId: string, card: any, quoteMessageId?: string): Promise<FeishuSendResult> {
+		this.logger?.debug("Sending card message", { receiveId, quoteMessageId });
+
+		const data: any = {
+			receive_id: receiveId,
+			msg_type: "interactive",
+			content: JSON.stringify(card),
+		};
+
+		// 添加引用消息 ID
+		if (quoteMessageId) {
+			data.quote_message_id = quoteMessageId;
+		}
 
 		const response = await this.client.im.v1.message.create({
 			params: {
 				receive_id_type: "chat_id",
 			},
-			data: {
-				receive_id: receiveId,
-				msg_type: "interactive",
-				content: JSON.stringify(card),
-			},
+			data,
 		});
 
 		if (response.code !== 0) {

@@ -357,8 +357,9 @@ export class CoreAgent {
 		try {
 			// 显示"思考中"卡片（飞书平台）
 			// 注意：必须在 initializeAgent 之前调用，因为 initializeAgent 会读取 hideThinking 状态
+			// 传入 message.id 作为引用消息 ID，让回复卡片能引用原消息
 			if ((platformContext as any).startThinking) {
-				await (platformContext as any).startThinking();
+				await (platformContext as any).startThinking(message.id);
 			}
 
 			// 初始化 Agent
