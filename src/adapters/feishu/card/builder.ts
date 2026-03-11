@@ -224,7 +224,13 @@ export class CardBuilder {
 	}): Card {
 		const elements: CardElement[] = [];
 
-		// 添加主要内容
+		// 1. 先添加时间线折叠面板（思考过程在上方）
+		if (options?.timeline && options.timeline.length > 0) {
+			// 完成时折叠面板（expanded 默认为 false）
+			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
+		}
+
+		// 2. 再添加主要内容
 		elements.push({
 			tag: "div",
 			text: {
@@ -233,13 +239,7 @@ export class CardBuilder {
 			},
 		});
 
-		// 添加时间线折叠面板（如果有）
-		if (options?.timeline && options.timeline.length > 0) {
-			// 完成时折叠面板（expanded 默认为 false）
-			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
-		}
-
-		// 添加页脚信息
+		// 3. 最后添加页脚信息
 		if (options?.elapsed !== undefined) {
 			elements.push({
 				tag: "markdown",
@@ -306,7 +306,7 @@ export class CardBuilder {
 	private buildTimelineList(timeline: TimelineEvent[]): CardElement {
 		const lines = timeline.map(event => {
 			if (event.type === "thinking") {
-				return `🤔 thinking: \`${event.content}\``;
+				return `thinking: \`${event.content}\``;
 			} else {
 				const statusIcon = event.status === "success" ? "✅" :
 				                   event.status === "error" ? "❌" :
@@ -347,7 +347,7 @@ export class CardBuilder {
 			// 添加该轮的事件
 			events.forEach(event => {
 				if (event.type === "thinking") {
-					turnLines.push(`🤔 thinking: \`${event.content}\``);
+					turnLines.push(`thinking: \`${event.content}\``);
 				} else {
 					const statusIcon = this.getStatusIcon(event.status);
 					// 如果有 label，显示 label 作为标题
@@ -374,7 +374,7 @@ export class CardBuilder {
 			header: {
 				title: {
 					tag: "markdown",
-					content: "🤔 思考过程",
+					content: "思考过程",
 				},
 				vertical_align: "center",
 				icon: {
