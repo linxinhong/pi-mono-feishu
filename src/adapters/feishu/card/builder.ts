@@ -54,6 +54,7 @@ export class CardBuilder {
 	 * @param status 状态：processing 或 complete
 	 */
 	buildStatusCard(elapsed?: number, status?: "processing" | "complete"): Card {
+		console.log("[CARD_TYPE] buildStatusCard - 状态卡片");
 		const statusIcon = status === "complete" ? "😊" : "🤔";
 		const timeDisplay = elapsed !== undefined
 			? ` (${this.formatElapsedTime(elapsed)})`
@@ -79,6 +80,7 @@ export class CardBuilder {
 	 * @param content 思考内容
 	 */
 	buildThinkingContentCard(content: string): Card {
+		console.log("[CARD_TYPE] buildThinkingContentCard - 思考内容卡片");
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
@@ -102,13 +104,18 @@ export class CardBuilder {
 	 * @param timeline 时间线事件列表（可选）
 	 */
 	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[]): Card {
+		console.log("[CARD_TYPE] buildToolCallsCard - 工具调用卡片", {
+			toolCallsCount: toolCalls?.length || 0,
+			timelineCount: timeline?.length || 0,
+		});
 		const elements: CardElement[] = [];
 
 		// 添加时间线折叠面板（如果有）
 		if (timeline && timeline.length > 0) {
-			console.log("[DEBUG] buildToolCallsCard: Adding timeline panel with", timeline.length, "events");
+			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板");
 			elements.push(this.buildTimelinePanel(timeline));
 		} else {
+			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
 			// 没有 timeline 时使用旧的工具调用列表
 			elements.push(this.buildToolCallsList(toolCalls));
 		}
@@ -148,15 +155,12 @@ export class CardBuilder {
 		toolCalls?: ToolCallInfo[];
 		timeline?: TimelineEvent[];
 	}): Card {
-		const elements: CardElement[] = [];
-
-		// 调试日志：检查传入参数
-		console.log("[DEBUG] buildStreamingCard called:", {
+		console.log("[CARD_TYPE] buildStreamingCard - 流式输出卡片", {
 			contentLength: content?.length || 0,
 			toolCallsCount: options?.toolCalls?.length || 0,
 			timelineCount: options?.timeline?.length || 0,
-			timeline: options?.timeline,
 		});
+		const elements: CardElement[] = [];
 
 		// 1. 工具调用区域（如果有）
 		if (options?.toolCalls && options.toolCalls.length > 0) {
