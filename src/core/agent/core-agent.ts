@@ -376,6 +376,12 @@ export class CoreAgent {
 			// 准备用户消息
 			const userMessage = this.formatUserMessage(message, additionalContext);
 
+			// 验证用户消息不为空
+			if (!userMessage || userMessage.trim().length === 0) {
+				log.logWarn("[Agent] Empty user message, skipping");
+				return "_No response_";
+			}
+
 			// 处理图片附件
 			const imageAttachments = this.processImageAttachments(message);
 
@@ -816,11 +822,27 @@ export class CoreAgent {
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
-			// 截断到最后 40 条消息，避免输入超过 API 限制
 			const maxMessages = 40;
 			const messages = loadedSession.messages.slice(-maxMessages);
-			state.agent.replaceMessages(messages);
-			log.logInfo(`[Agent] Loaded ${messages.length} messages from context (total: ${loadedSession.messages.length})`);
+
+			// 计算预估总长度
+			const systemPromptLength = state.agent.getSystemPrompt()?.length || 0;
+			const messagesLength = messages.reduce((sum, msg) =>
+				sum + JSON.stringify(msg).length, 0);
+			const estimatedTotal = systemPromptLength + messagesLength;
+
+			// 如果超限，动态减少消息数量
+			let finalMessages = messages;
+			if (estimatedTotal > 250000) {
+				const targetLength = 250000 - systemPromptLength;
+				const avgMsgLength = messagesLength / messages.length;
+				const maxAllowed = Math.max(5, Math.floor(targetLength / avgMsgLength));
+				finalMessages = messages.slice(-maxAllowed);
+				log.logWarn(`[Agent] Reducing messages from ${messages.length} to ${finalMessages.length} due to length limit`);
+			}
+
+			state.agent.replaceMessages(finalMessages);
+			log.logInfo(`[Agent] Loaded ${finalMessages.length} messages from context (system prompt: ${systemPromptLength}, messages: ${messagesLength})`);
 		}
 
 		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id}`);
