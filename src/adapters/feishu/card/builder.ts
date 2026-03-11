@@ -340,23 +340,25 @@ export class CardBuilder {
 		turns.forEach((turn, index) => {
 			const events = turnGroups[Number(turn)];
 
-			// 添加 step 标题
-			turnLines.push(`<step ${turn}>`);
-
 			// 添加该轮的事件
 			events.forEach(event => {
 				if (event.type === "thinking") {
-					turnLines.push(`thinking: \`${event.content}\``);
+					turnLines.push(`🤔 thinking: \`${event.content}\``);
 				} else {
 					const statusIcon = this.getStatusIcon(event.status);
-					const argsDisplay = event.args ? ` \`${event.args}\`` : "";
-					turnLines.push(`> ${event.content}:${argsDisplay} ${statusIcon}`);
+					// 如果有 label，显示 label 作为标题
+					if (event.label) {
+						turnLines.push(`**${event.label}**`);
+					}
+					// 显示工具名和参数
+					const argsDisplay = event.args ? ` ${event.args}` : "";
+					turnLines.push(`${event.content}:${argsDisplay} ${statusIcon}`);
 				}
 			});
 
 			// 添加分割线（最后一轮不加）
 			if (index < turns.length - 1) {
-				turnLines.push("──────────────");
+				turnLines.push("");
 			}
 		});
 
@@ -368,7 +370,7 @@ export class CardBuilder {
 			header: {
 				title: {
 					tag: "markdown",
-					content: "📋 处理流程",
+					content: "🤔 思考过程",
 				},
 				vertical_align: "center",
 				icon: {

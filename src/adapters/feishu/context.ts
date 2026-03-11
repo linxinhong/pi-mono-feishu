@@ -654,11 +654,13 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	private addToolCallToTimeline(toolName: string, args?: Record<string, any>, status?: "pending" | "running" | "success" | "error"): void {
 		const argsStr = args ? this.formatToolArgs(args) : "";
+		const label = args?.label; // 提取 label
 
 		this.timeline.push({
 			type: "toolcall",
 			turn: this.currentTurn || 1,
 			content: toolName,
+			label: label,
 			args: argsStr || undefined,
 			status: status || "running",
 		});

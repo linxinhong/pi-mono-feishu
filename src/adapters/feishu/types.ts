@@ -433,6 +433,8 @@ export interface TimelineEvent {
 	turn: number;
 	/** 内容：thinking 摘要 或 工具名 */
 	content: string;
+	/** 工具标签（仅 toolcall 类型，用于展示） */
+	label?: string;
 	/** 工具参数（仅 toolcall 类型） */
 	args?: string;
 	/** 工具状态（仅 toolcall 类型） */
