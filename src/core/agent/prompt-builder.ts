@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import type { AgentContext } from "./context.js";
 import type { Skill } from "@mariozechner/pi-coding-agent";
 import { formatSkillsForPrompt, loadSkillsFromDir } from "@mariozechner/pi-coding-agent";
@@ -383,7 +384,13 @@ export function loadSkills(channelDir: string, workspacePath: string): Skill[] {
 		return hostPath;
 	};
 
-	// 加载全局技能
+	// 加载全局技能（~/.agents/skills）
+	const agentsSkillsDir = join(homedir(), ".agents", "skills");
+	for (const skill of loadSkillsFromDir({ dir: agentsSkillsDir, source: "agents" }).skills) {
+		skillMap.set(skill.name, skill);
+	}
+
+	// 加载工作区技能（~/.pi-claw/skills）
 	const workspaceSkillsDir = join(workspacePath, "skills");
 	for (const skill of loadSkillsFromDir({ dir: workspaceSkillsDir, source: "workspace" }).skills) {
 		skill.filePath = translatePath(skill.filePath);
