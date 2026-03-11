@@ -238,7 +238,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				return;
 			} catch (error: any) {
 				// 检查是否是速率限制错误 (230020)
-				if (error?.code === 230020) {
+				const errorMsg = String(error?.message || error);
+				if (errorMsg.includes("230020") || error?.code === 230020) {
 					// 静默跳过，等待下次更新
 					this.logger?.debug("Card update rate limited, skipping");
 					return;
@@ -260,7 +261,8 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.currentCardStatus = "streaming";
 		} catch (error: any) {
 			// 检查是否是速率限制错误
-			if (error?.code === 230020) {
+			const errorMsg = String(error?.message || error);
+			if (errorMsg.includes("230020") || error?.code === 230020) {
 				this.logger?.debug("Card send rate limited, skipping");
 				return;
 			}
@@ -311,7 +313,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				return;
 			} catch (error: any) {
 				// 检查是否是速率限制错误 (230020)
-				if (error?.code === 230020) {
+				const errorMsg = String(error?.message || error);
+				if (errorMsg.includes("230020") || error?.code === 230020) {
 					// 静默跳过，等待下次更新
 					this.logger?.debug("Streaming card update rate limited, skipping");
 					return;
@@ -330,12 +333,14 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.currentCardStatus = "streaming";
 		} catch (error: any) {
 			// 检查是否是速率限制错误
-			if (error?.code === 230020) {
+			const errorMsg = String(error?.message || error);
+			const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
+			if (isRateLimit) {
 				this.logger?.debug("Streaming card send rate limited, skipping");
 				return;
 			}
 			this.logger?.error("Failed to send card", undefined, error as Error);
-			// 发送失败，降级为文本消息
+			// 发送失败，降级为文本消息（不是频率限制时才降级）
 			await this.messageSender.sendText(this.chatId, content);
 		}
 	}
@@ -448,7 +453,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
 				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
 			} catch (error: any) {
-				if (error?.code !== 230020) {
+				const errorMsg = String(error?.message || error);
+				if (!errorMsg.includes("230020") && error?.code !== 230020) {
 					this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
 				}
 			}
@@ -485,10 +491,14 @@ export class FeishuPlatformContext implements PlatformContext {
 					expanded: false,  // 完成时折叠
 				});
 				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
-			} catch (error) {
-				this.logger?.error("Failed to update final card", undefined, error as Error);
-				// 更新失败，降级发送文本（仅在最终回复时）
-				if (isFinalResponse && content) {
+			} catch (error: any) {
+				const errorMsg = String(error?.message || error);
+				const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
+				if (!isRateLimit) {
+					this.logger?.error("Failed to update final card", undefined, error as Error);
+				}
+				// 更新失败，降级发送文本（仅在最终回复且不是频率限制时）
+				if (!isRateLimit && isFinalResponse && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 					// 标记响应已发送，防止重复发送
 					this._responseSent = true;
@@ -739,7 +749,8 @@ export class FeishuPlatformContext implements PlatformContext {
 			await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
 		} catch (error: any) {
 			// 检查是否是速率限制错误 (230020)
-			if (error?.code === 230020) {
+			const errorMsg = String(error?.message || error);
+			if (errorMsg.includes("230020") || error?.code === 230020) {
 				this.logger?.debug("Tool card update rate limited, skipping");
 				return;
 			}
