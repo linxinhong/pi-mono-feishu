@@ -461,18 +461,25 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 获取时间线
 		const timeline = this.getTimeline();
 
-		// 更新工具卡片为最终结果（如果有工具调用）
+		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
 		if (this.cardIds.toolCardId && this.toolCalls.length > 0) {
 			try {
-				const finalToolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
-				await this.messageSender.updateCard(this.cardIds.toolCardId, finalToolCard);
+				// 使用 buildCompleteCard 将最终回复和时间线整合到一个卡片中
+				const finalCard = this.cardBuilder.buildCompleteCard(content, {
+					elapsed,
+					toolCalls: this.toolCalls,
+					timeline,
+				});
+				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
 			} catch (error) {
-				this.logger?.error("Failed to update final tool card", undefined, error as Error);
+				this.logger?.error("Failed to update final card", undefined, error as Error);
+				// 更新失败，降级发送文本
+				if (content) {
+					await this.messageSender.sendText(this.chatId, content);
+				}
 			}
-		}
-
-		// 发送最终回复（作为新消息）
-		if (content) {
+		} else if (content) {
+			// 没有工具调用时，发送文本消息
 			await this.messageSender.sendText(this.chatId, content);
 		}
 
