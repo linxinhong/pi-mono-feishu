@@ -249,7 +249,12 @@ export class LarkClient {
 			throw new Error(`Failed to send message: ${response.msg}`);
 		}
 
-		return { message_id: response.data?.message_id || "" };
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("sendText succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	/**
@@ -273,7 +278,12 @@ export class LarkClient {
 			throw new Error(`Failed to send card: ${response.msg}`);
 		}
 
-		return { message_id: response.data?.message_id || "" };
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("sendCard succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	/**
@@ -371,7 +381,12 @@ export class LarkClient {
 			throw new Error(`Failed to send image: ${response.msg}`);
 		}
 
-		return { message_id: response.data?.message_id || "" };
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("sendImage succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	/**
@@ -395,7 +410,12 @@ export class LarkClient {
 			throw new Error(`Failed to send file: ${response.msg}`);
 		}
 
-		return { message_id: response.data?.message_id || "" };
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("sendFile succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	/**
@@ -421,7 +441,12 @@ export class LarkClient {
 			throw new Error(`Failed to reply in thread: ${response.msg}`);
 		}
 
-		return { message_id: response.data?.message_id || "" };
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("replyInThread succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	// ========================================================================
