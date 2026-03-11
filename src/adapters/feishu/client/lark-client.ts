@@ -237,22 +237,20 @@ export class LarkClient {
 	async sendText(receiveId: string, text: string, quoteMessageId?: string): Promise<FeishuSendResult> {
 		this.logger?.debug("Sending text message", { receiveId, textLength: text.length, quoteMessageId });
 
-		const data: any = {
-			receive_id: receiveId,
-			msg_type: "text",
-			content: JSON.stringify({ text }),
-		};
-
-		// 添加引用消息 ID
+		// 如果有引用消息 ID，使用 reply API 实现引用功能
 		if (quoteMessageId) {
-			data.quote_message_id = quoteMessageId;
+			return this.replyText(quoteMessageId, text);
 		}
 
 		const response = await this.client.im.v1.message.create({
 			params: {
 				receive_id_type: "chat_id",
 			},
-			data,
+			data: {
+				receive_id: receiveId,
+				msg_type: "text",
+				content: JSON.stringify({ text }),
+			},
 		});
 
 		if (response.code !== 0) {
@@ -268,6 +266,38 @@ export class LarkClient {
 	}
 
 	/**
+	 * 回复文本消息（实现引用功能）
+	 * @param messageId 要回复的消息 ID
+	 * @param text 文本内容
+	 * @param replyInThread 是否在话题中回复
+	 */
+	async replyText(messageId: string, text: string, replyInThread?: boolean): Promise<FeishuSendResult> {
+		this.logger?.debug("Replying text message", { messageId, textLength: text.length, replyInThread });
+
+		const response = await this.client.im.v1.message.reply({
+			path: {
+				message_id: messageId,
+			},
+			data: {
+				content: JSON.stringify({ text }),
+				msg_type: "text",
+				reply_in_thread: replyInThread ?? false,
+			},
+		});
+
+		if (response.code !== 0) {
+			throw new Error(`Failed to reply message: [${response.code}] ${response.msg}`);
+		}
+
+		const replyMessageId = response.data?.message_id;
+		if (!replyMessageId) {
+			throw new Error("replyText succeeded but no message_id returned");
+		}
+
+		return { message_id: replyMessageId };
+	}
+
+	/**
 	 * 发送卡片消息
 	 * @param receiveId 接收者 ID
 	 * @param card 卡片内容
@@ -276,25 +306,20 @@ export class LarkClient {
 	async sendCard(receiveId: string, card: any, quoteMessageId?: string): Promise<FeishuSendResult> {
 		this.logger?.debug("Sending card message", { receiveId, quoteMessageId });
 
-		const data: any = {
-			receive_id: receiveId,
-			msg_type: "interactive",
-			content: JSON.stringify(card),
-		};
-
-		// 添加引用消息 ID
+		// 如果有引用消息 ID，使用 reply API 实现引用功能
 		if (quoteMessageId) {
-			data.quote_message_id = quoteMessageId;
-			this.logger?.debug("Adding quote_message_id to card", { quoteMessageId });
+			return this.replyCard(quoteMessageId, card);
 		}
-
-		this.logger?.debug("Sending card with data", { data: JSON.stringify(data, null, 2) });
 
 		const response = await this.client.im.v1.message.create({
 			params: {
 				receive_id_type: "chat_id",
 			},
-			data,
+			data: {
+				receive_id: receiveId,
+				msg_type: "interactive",
+				content: JSON.stringify(card),
+			},
 		});
 
 		if (response.code !== 0) {
@@ -307,6 +332,38 @@ export class LarkClient {
 		}
 
 		return { message_id: messageId };
+	}
+
+	/**
+	 * 回复卡片消息（实现引用功能）
+	 * @param messageId 要回复的消息 ID
+	 * @param card 卡片内容
+	 * @param replyInThread 是否在话题中回复
+	 */
+	async replyCard(messageId: string, card: any, replyInThread?: boolean): Promise<FeishuSendResult> {
+		this.logger?.debug("Replying card message", { messageId, replyInThread });
+
+		const response = await this.client.im.v1.message.reply({
+			path: {
+				message_id: messageId,
+			},
+			data: {
+				content: JSON.stringify(card),
+				msg_type: "interactive",
+				reply_in_thread: replyInThread ?? false,
+			},
+		});
+
+		if (response.code !== 0) {
+			throw new Error(`Failed to reply card: [${response.code}] ${response.msg}`);
+		}
+
+		const replyMessageId = response.data?.message_id;
+		if (!replyMessageId) {
+			throw new Error("replyCard succeeded but no message_id returned");
+		}
+
+		return { message_id: replyMessageId };
 	}
 
 	/**
