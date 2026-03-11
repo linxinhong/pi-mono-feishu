@@ -826,7 +826,7 @@ export class CoreAgent {
 			const messages = loadedSession.messages.slice(-maxMessages);
 
 			// 计算预估总长度
-			const systemPromptLength = state.agent.getSystemPrompt()?.length || 0;
+			const systemPromptLength = systemPrompt.length;
 			const messagesLength = messages.reduce((sum, msg) =>
 				sum + JSON.stringify(msg).length, 0);
 			const estimatedTotal = systemPromptLength + messagesLength;
