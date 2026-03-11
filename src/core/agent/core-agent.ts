@@ -494,6 +494,11 @@ export class CoreAgent {
 							// Turn 开始
 							turnNumber++;
 
+							// 通知 platformContext 开始新 turn
+							if ((platformContext as any).startNewTurn) {
+								(platformContext as any).startNewTurn();
+							}
+
 							// 触发 agent:turn-start hook
 							if (hookManager?.hasHooks(HOOK_NAMES.AGENT_TURN_START)) {
 								await hookManager.emit(HOOK_NAMES.AGENT_TURN_START, {

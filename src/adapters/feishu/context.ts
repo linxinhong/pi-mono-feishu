@@ -74,6 +74,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 处理流程时间线
 	private timeline: TimelineEvent[] = [];
 
+	// 当前 turn 轮次
+	private currentTurn: number = 0;
+
 	// 工具卡片创建锁（防止并发创建多张卡片）
 	private toolCardCreating: boolean = false;
 
@@ -219,11 +222,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (!this.pendingContent) return;
 
 		const content = this.pendingContent;
+		const timeline = this.getTimeline();
 
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
-				const card = this.cardBuilder.buildStreamingCard(content);
+				const card = this.cardBuilder.buildStreamingCard(content, { timeline });
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.lastCardUpdateTime = Date.now();
 				this.currentCardStatus = "streaming";
@@ -245,7 +249,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			if (!this.thinkingStartTime) {
 				this.thinkingStartTime = Date.now();
 			}
-			const card = this.cardBuilder.buildStreamingCard(content);
+			const card = this.cardBuilder.buildStreamingCard(content, { timeline });
 			const messageId = await this.messageSender.sendCard(this.chatId, card);
 			this.currentCardMessageId = messageId;
 			this.lastCardUpdateTime = Date.now();
@@ -285,10 +289,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 更新流式输出内容
 	 */
 	async updateStreaming(content: string): Promise<void> {
+		const timeline = this.getTimeline();
+
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
-				const card = this.cardBuilder.buildStreamingCard(content);
+				const card = this.cardBuilder.buildStreamingCard(content, { timeline });
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "streaming";
 				return;
@@ -307,7 +313,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 创建新卡片
 		try {
-			const card = this.cardBuilder.buildStreamingCard(content);
+			const card = this.cardBuilder.buildStreamingCard(content, { timeline });
 			const messageId = await this.messageSender.sendCard(this.chatId, card);
 			this.currentCardMessageId = messageId;
 			this.currentCardStatus = "streaming";
@@ -333,15 +339,23 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
+		// 获取时间线
+		const timeline = this.getTimeline();
+
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
-				const card = this.cardBuilder.buildCompleteCard(content, { elapsed, toolCalls: this.toolCalls });
+				const card = this.cardBuilder.buildCompleteCard(content, {
+					elapsed,
+					toolCalls: this.toolCalls,
+					timeline,
+				});
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "complete";
 				this.currentCardMessageId = null;
 				this.thinkingStartTime = null;
 				this.toolCalls = []; // 清空工具调用
+				this.timeline = []; // 清空时间线
 				this.pendingContent = ""; // 清空累积内容
 				return;
 			} catch (error) {
@@ -355,6 +369,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
 		this.toolCalls = [];
+		this.timeline = []; // 清空时间线
 		this.pendingContent = ""; // 清空累积内容
 	}
 
@@ -376,6 +391,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.thinkingContent = "";
 		this.toolCalls = [];
 		this.timeline = []; // 清空时间线
+		this.currentTurn = 0; // 重置 turn 轮次
 		this.toolCardCreating = false; // 重置工具卡片创建锁
 		this.cardIds = {
 			statusCardId: null,
@@ -473,6 +489,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.thinkingStartTime = null;
 		this.toolCalls = [];
 		this.timeline = []; // 清空时间线
+		this.currentTurn = 0; // 重置 turn 轮次
 		this.thinkingContent = "";
 		this.pendingContent = "";
 		this._responseSent = true;
@@ -607,6 +624,20 @@ export class FeishuPlatformContext implements PlatformContext {
 	// ========================================================================
 
 	/**
+	 * 开始新的 turn 轮次
+	 */
+	startNewTurn(): void {
+		this.currentTurn++;
+	}
+
+	/**
+	 * 获取当前 turn 轮次
+	 */
+	getCurrentTurn(): number {
+		return this.currentTurn;
+	}
+
+	/**
 	 * 添加思考内容到时间线
 	 * @param content 思考内容
 	 */
@@ -616,6 +647,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		this.timeline.push({
 			type: "thinking",
+			turn: this.currentTurn || 1,
 			content: truncated,
 		});
 	}
@@ -628,6 +660,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		this.timeline.push({
 			type: "toolcall",
+			turn: this.currentTurn || 1,
 			content: toolName,
 			args: argsStr || undefined,
 			status: status || "running",

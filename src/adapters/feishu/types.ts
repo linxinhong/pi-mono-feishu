@@ -439,6 +439,8 @@ export interface TimerState {
 export interface TimelineEvent {
 	/** 事件类型 */
 	type: "thinking" | "toolcall";
+	/** 所属轮次 */
+	turn: number;
 	/** 内容：thinking 摘要 或 工具名 */
 	content: string;
 	/** 工具参数（仅 toolcall 类型） */

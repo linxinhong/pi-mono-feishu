@@ -134,12 +134,15 @@ export class CardBuilder {
 	/**
 	 * 构建流式输出卡片
 	 */
-	buildStreamingCard(content: string, toolCalls?: ToolCallInfo[]): Card {
+	buildStreamingCard(content: string, options?: {
+		toolCalls?: ToolCallInfo[];
+		timeline?: TimelineEvent[];
+	}): Card {
 		const elements: CardElement[] = [];
 
 		// 1. 工具调用区域（如果有）
-		if (toolCalls && toolCalls.length > 0) {
-			elements.push(this.buildToolCallsList(toolCalls));
+		if (options?.toolCalls && options.toolCalls.length > 0) {
+			elements.push(this.buildToolCallsList(options.toolCalls));
 		}
 
 		// 2. 主要内容区域（如果有）
@@ -153,7 +156,12 @@ export class CardBuilder {
 			});
 		}
 
-		// 3. 状态指示
+		// 3. 时间线折叠面板（如果有）
+		if (options?.timeline && options.timeline.length > 0) {
+			elements.push(this.buildTimelinePanel(options.timeline));
+		}
+
+		// 4. 状态指示
 		elements.push({
 			tag: "markdown",
 			content: "⏳ 正在生成...",
@@ -163,6 +171,10 @@ export class CardBuilder {
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
+			header: {
+				title: { tag: "plain_text", content: "🤔 处理中..." },
+				template: "blue",
+			},
 			body: { elements },
 		};
 	}
@@ -174,33 +186,9 @@ export class CardBuilder {
 		elapsed?: number;
 		toolCalls?: ToolCallInfo[];
 		thinkingContent?: string;
+		timeline?: TimelineEvent[];
 	}): Card {
 		const elements: CardElement[] = [];
-
-		// 添加思考过程（如果有）
-		if (options?.thinkingContent) {
-			elements.push({
-				tag: "collapsible_panel",
-				expanded: false,
-				header: {
-					title: {
-						tag: "plain_text",
-						content: "💭 思考过程",
-					},
-				},
-				body: {
-					elements: [
-						{
-							tag: "div",
-							text: {
-								tag: "lark_md",
-								content: this.formatContent(options.thinkingContent),
-							},
-						},
-					],
-				},
-			});
-		}
 
 		// 添加主要内容
 		elements.push({
@@ -211,9 +199,9 @@ export class CardBuilder {
 			},
 		});
 
-		// 添加工具调用汇总
-		if (options?.toolCalls && options.toolCalls.length > 0) {
-			elements.push(this.buildToolCallsSummary(options.toolCalls));
+		// 添加时间线折叠面板（如果有）
+		if (options?.timeline && options.timeline.length > 0) {
+			elements.push(this.buildTimelinePanel(options.timeline));
 		}
 
 		// 添加页脚信息
@@ -228,6 +216,10 @@ export class CardBuilder {
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
+			header: {
+				title: { tag: "plain_text", content: "✅ 完成" },
+				template: "green",
+			},
 			body: { elements },
 		};
 	}
@@ -299,6 +291,79 @@ export class CardBuilder {
 				content: lines.join("\n"),
 			},
 		};
+	}
+
+	/**
+	 * 构建时间线折叠面板（按 turn 分组）
+	 */
+	buildTimelinePanel(timeline: TimelineEvent[]): CardElement {
+		// 按 turn 分组
+		const turnGroups = this.groupByTurn(timeline);
+
+		// 构建每轮的内容
+		const turnLines: string[] = [];
+		const turns = Object.keys(turnGroups).sort((a, b) => Number(a) - Number(b));
+
+		turns.forEach((turn, index) => {
+			const events = turnGroups[Number(turn)];
+
+			// 添加 step 标题
+			turnLines.push(`<step ${turn}>`);
+
+			// 添加该轮的事件
+			events.forEach(event => {
+				if (event.type === "thinking") {
+					turnLines.push(`thinking: \`${event.content}\``);
+				} else {
+					const statusIcon = this.getStatusIcon(event.status);
+					const argsDisplay = event.args ? ` \`${event.args}\`` : "";
+					turnLines.push(`> ${event.content}:${argsDisplay} ${statusIcon}`);
+				}
+			});
+
+			// 添加分割线（最后一轮不加）
+			if (index < turns.length - 1) {
+				turnLines.push("──────────────");
+			}
+		});
+
+		return {
+			tag: "collapsible_panel",
+			expanded: false,
+			header: {
+				title: { tag: "plain_text", content: "📋 处理流程" },
+			},
+			body: {
+				elements: [{
+					tag: "div",
+					text: { tag: "lark_md", content: turnLines.join("\n") },
+				}],
+			},
+		};
+	}
+
+	/**
+	 * 按 turn 分组
+	 */
+	private groupByTurn(timeline: TimelineEvent[]): Record<number, TimelineEvent[]> {
+		return timeline.reduce((groups, event) => {
+			const turn = event.turn || 1;
+			if (!groups[turn]) groups[turn] = [];
+			groups[turn].push(event);
+			return groups;
+		}, {} as Record<number, TimelineEvent[]>);
+	}
+
+	/**
+	 * 获取状态图标
+	 */
+	private getStatusIcon(status?: string): string {
+		switch (status) {
+			case "success": return "✅";
+			case "error": return "❌";
+			case "running": return "🔄";
+			default: return "⏳";
+		}
 	}
 
 	/**
