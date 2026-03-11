@@ -102,20 +102,22 @@ export class CardBuilder {
 	 * 构建工具调用卡片
 	 * @param toolCalls 工具调用列表
 	 * @param timeline 时间线事件列表（可选）
+	 * @param expanded 折叠面板是否展开（思考过程中展开，完成后折叠）
 	 */
-	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[]): Card {
+	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[], expanded: boolean = true): Card {
 		const hasTimeline = timeline && timeline.length > 0;
 		console.log("[CARD_TYPE] buildToolCallsCard - 工具调用卡片", {
 			toolCallsCount: toolCalls?.length || 0,
 			timelineCount: timeline?.length || 0,
 			hasTimeline: hasTimeline,
+			expanded: expanded,
 		});
 		const elements: CardElement[] = [];
 
 		// 添加时间线折叠面板（如果有）
 		if (hasTimeline) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板");
-			elements.push(this.buildTimelinePanel(timeline!));
+			elements.push(this.buildTimelinePanel(timeline!, expanded));
 		} else {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
 			// 没有 timeline 时使用旧的工具调用列表
@@ -211,12 +213,14 @@ export class CardBuilder {
 
 	/**
 	 * 构建完成状态卡片
+	 * 注意：移除 header 以支持飞书的 quote_message_id 引用功能
 	 */
 	buildCompleteCard(content: string, options?: {
 		elapsed?: number;
 		toolCalls?: ToolCallInfo[];
 		thinkingContent?: string;
 		timeline?: TimelineEvent[];
+		expanded?: boolean;  // 折叠面板是否展开（完成后应该折叠）
 	}): Card {
 		const elements: CardElement[] = [];
 
@@ -231,7 +235,8 @@ export class CardBuilder {
 
 		// 添加时间线折叠面板（如果有）
 		if (options?.timeline && options.timeline.length > 0) {
-			elements.push(this.buildTimelinePanel(options.timeline));
+			// 完成时折叠面板（expanded 默认为 false）
+			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
 		}
 
 		// 添加页脚信息
@@ -246,10 +251,7 @@ export class CardBuilder {
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
-			header: {
-				title: { tag: "plain_text", content: "✅ 完成" },
-				template: "green",
-			},
+			// 移除 header，让引用功能正常工作
 			body: { elements },
 		};
 	}
@@ -325,9 +327,11 @@ export class CardBuilder {
 
 	/**
 	 * 构建时间线折叠面板（按 turn 分组）
+	 * @param timeline 时间线事件列表
+	 * @param expanded 是否展开（思考过程中展开，完成后折叠）
 	 */
-	buildTimelinePanel(timeline: TimelineEvent[]): CardElement {
-		console.log("[DEBUG] buildTimelinePanel called with", timeline.length, "events");
+	buildTimelinePanel(timeline: TimelineEvent[], expanded: boolean = false): CardElement {
+		console.log("[DEBUG] buildTimelinePanel called with", timeline.length, "events, expanded:", expanded);
 
 		// 按 turn 分组
 		const turnGroups = this.groupByTurn(timeline);
@@ -366,7 +370,7 @@ export class CardBuilder {
 
 		const panel = {
 			tag: "collapsible_panel",
-			expanded: false,
+			expanded: expanded,
 			header: {
 				title: {
 					tag: "markdown",

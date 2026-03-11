@@ -444,7 +444,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (this.cardIds.toolCardId) {
 			try {
 				const timeline = this.getTimeline();
-				const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
+				// 思考过程中展开折叠面板
+				const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
 				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
 			} catch (error: any) {
 				if (error?.code !== 230020) {
@@ -473,13 +474,15 @@ export class FeishuPlatformContext implements PlatformContext {
 		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
 		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
-		if (this.cardIds.toolCardId && this.toolCalls.length > 0) {
+		// 注意：只要 toolCardId 存在就更新卡片，不需要判断 toolCalls.length > 0
+		if (this.cardIds.toolCardId) {
 			try {
 				// 使用 buildCompleteCard 将最终回复和时间线整合到一个卡片中
 				const finalCard = this.cardBuilder.buildCompleteCard(content, {
 					elapsed,
 					toolCalls: this.toolCalls,
 					timeline,
+					expanded: false,  // 完成时折叠
 				});
 				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
 			} catch (error) {
@@ -490,7 +493,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				}
 			}
 		} else if (isFinalResponse && content) {
-			// 没有工具调用时，只在最终回复时发送文本消息（作为降级）
+			// 没有卡片时才发送文本消息
 			await this.messageSender.sendText(this.chatId, content);
 		}
 
@@ -569,7 +572,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				timelineCount: timeline?.length || 0,
 				timeline: timeline,
 			});
-			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
+			// 思考过程中展开折叠面板
+			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
 
 			if (this.cardIds.toolCardId) {
 				// 更新现有卡片
