@@ -370,14 +370,15 @@ export class CardBuilder {
 			expanded: expanded,
 			header: {
 				title: {
-					tag: "markdown",
+					tag: "plain_text",
 					content: "思考过程",
+					text_size: "normal",
 				},
 				vertical_align: "center",
 				icon: {
 					tag: "standard_icon",
 					token: "down-small-ccm_outlined",
-					size: "16px 16px",
+					size: "14px 14px",
 				},
 				icon_position: "follow_text",
 				icon_expanded_angle: -180,
