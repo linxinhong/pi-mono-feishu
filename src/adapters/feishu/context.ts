@@ -566,7 +566,10 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (this.toolCalls.length === 0) return;
 
 		try {
-			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls);
+			// 获取时间线并传入工具卡片
+			const timeline = this.getTimeline();
+			console.log("[DEBUG] updateOrCreateToolCard: timeline length =", timeline?.length || 0);
+			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
 
 			if (this.cardIds.toolCardId) {
 				// 更新现有卡片
@@ -762,7 +765,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (!this.cardIds.toolCardId || this.toolCalls.length === 0) return;
 
 		try {
-			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls);
+			const timeline = this.getTimeline();
+			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
 			await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
 		} catch (error: any) {
 			// 检查是否是速率限制错误 (230020)

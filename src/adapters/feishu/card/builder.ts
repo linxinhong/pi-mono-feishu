@@ -99,14 +99,24 @@ export class CardBuilder {
 	/**
 	 * 构建工具调用卡片
 	 * @param toolCalls 工具调用列表
+	 * @param timeline 时间线事件列表（可选）
 	 */
-	buildToolCallsCard(toolCalls: ToolCallInfo[]): Card {
+	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[]): Card {
+		const elements: CardElement[] = [];
+
+		// 添加时间线折叠面板（如果有）
+		if (timeline && timeline.length > 0) {
+			console.log("[DEBUG] buildToolCallsCard: Adding timeline panel with", timeline.length, "events");
+			elements.push(this.buildTimelinePanel(timeline));
+		} else {
+			// 没有 timeline 时使用旧的工具调用列表
+			elements.push(this.buildToolCallsList(toolCalls));
+		}
+
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
-			body: {
-				elements: [this.buildToolCallsList(toolCalls)],
-			},
+			body: { elements },
 		};
 	}
 
