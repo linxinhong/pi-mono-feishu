@@ -366,14 +366,27 @@ export class CardBuilder {
 			tag: "collapsible_panel",
 			expanded: false,
 			header: {
-				title: { tag: "plain_text", content: "📋 处理流程" },
+				title: {
+					tag: "markdown",
+					content: "📋 处理流程",
+				},
+				vertical_align: "center",
+				icon: {
+					tag: "standard_icon",
+					token: "down-small-ccm_outlined",
+					size: "16px 16px",
+				},
+				icon_position: "follow_text",
+				icon_expanded_angle: -180,
 			},
-			expanded_content: {
-				elements: [{
-					tag: "div",
-					text: { tag: "lark_md", content: turnLines.join("\n") },
-				}],
-			},
+			border: { color: "grey", corner_radius: "5px" },
+			vertical_spacing: "8px",
+			padding: "8px 8px 8px 8px",
+			elements: [{
+				tag: "markdown",
+				content: turnLines.join("\n"),
+				text_size: "notation",
+			}],
 		};
 
 		console.log("[DEBUG] Final panel structure:", JSON.stringify(panel, null, 2));
