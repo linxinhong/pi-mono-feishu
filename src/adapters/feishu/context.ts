@@ -595,7 +595,8 @@ export class FeishuPlatformContext implements PlatformContext {
 			// 如果正在创建中，跳过本次更新（下一次调用会更新）
 		} catch (error: any) {
 			// 检查是否是速率限制错误 (230020)
-			if (error?.code === 230020) {
+			const errorMsg = String(error?.message || error);
+			if (errorMsg.includes("230020") || error?.code === 230020) {
 				this.logger?.debug("Tool card update rate limited, skipping");
 				return;
 			}
