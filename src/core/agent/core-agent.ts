@@ -528,6 +528,7 @@ export class CoreAgent {
 							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 							const assistantMsg = agentEvent.message as any;
+							const stopReason = assistantMsg.stopReason || "stop";
 							if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
 							if (assistantMsg.errorMessage) {
 								runState.errorMessage = assistantMsg.errorMessage;
@@ -538,9 +539,9 @@ export class CoreAgent {
 							const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
 							finalResponse = textParts.join("\n");
 
-							// 完成思考卡片
+							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
 							if ((platformContext as any).finishThinking) {
-								await (platformContext as any).finishThinking(finalResponse);
+								await (platformContext as any).finishThinking(finalResponse, stopReason);
 							}
 
 							resolve(finalResponse);

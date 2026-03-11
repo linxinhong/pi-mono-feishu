@@ -450,8 +450,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	/**
 	 * 完成思考，显示最终回复
 	 * @param content 最终回复内容
+	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
-	async finishThinking(content: string): Promise<void> {
+	async finishThinking(content: string, stopReason?: string): Promise<void> {
 		// 清理节流定时器
 		this.cleanupThrottle();
 
@@ -460,6 +461,9 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 获取时间线
 		const timeline = this.getTimeline();
+
+		// 判断是否是最终回复
+		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
 		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
 		if (this.cardIds.toolCardId && this.toolCalls.length > 0) {
@@ -473,32 +477,34 @@ export class FeishuPlatformContext implements PlatformContext {
 				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
 			} catch (error) {
 				this.logger?.error("Failed to update final card", undefined, error as Error);
-				// 更新失败，降级发送文本
-				if (content) {
+				// 更新失败，降级发送文本（仅在最终回复时）
+				if (isFinalResponse && content) {
 					await this.messageSender.sendText(this.chatId, content);
 				}
 			}
-		} else if (content) {
-			// 没有工具调用时，发送文本消息
+		} else if (isFinalResponse && content) {
+			// 没有工具调用时，只在最终回复时发送文本消息（作为降级）
 			await this.messageSender.sendText(this.chatId, content);
 		}
 
-		// 清理状态
-		this.currentCardStatus = "complete";
-		this.thinkingStartTime = null;
-		this.toolCalls = [];
-		this.timeline = []; // 清空时间线
-		this.currentTurn = 0; // 重置 turn 轮次
-		this.thinkingContent = "";
-		this.pendingContent = "";
-		this._responseSent = true;
+		// 只有在最终回复时才清理状态
+		if (isFinalResponse) {
+			this.currentCardStatus = "complete";
+			this.thinkingStartTime = null;
+			this.toolCalls = [];
+			this.timeline = []; // 清空时间线
+			this.currentTurn = 0; // 重置 turn 轮次
+			this.thinkingContent = "";
+			this.pendingContent = "";
+			this._responseSent = true;
 
-		// 重置卡片 ID
-		this.cardIds = {
-			statusCardId: null,
-			thinkingCardId: null,
-			toolCardId: null,
-		};
+			// 重置卡片 ID
+			this.cardIds = {
+				statusCardId: null,
+				thinkingCardId: null,
+				toolCardId: null,
+			};
+		}
 	}
 
 	/**
