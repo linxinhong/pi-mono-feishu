@@ -455,8 +455,10 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	async updateThinking(content: string): Promise<void> {
+		console.log("[DEBUG] updateThinking called with:", content, "current thinkingContent:", this.thinkingContent);
 		// 只有当内容有变化且非空时才添加到时间线
 		if (content && content !== this.thinkingContent) {
+			console.log("[DEBUG] Adding to timeline:");
 			this.addThinkingToTimeline(content);
 		}
 
@@ -735,6 +737,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	addThinkingToTimeline(content: string): void {
+		console.log("[DEBUG] addThinkingToTimeline called with:", content);
 		// 截断思考内容（最多显示 50 个字符）
 		const truncated = content.length > 50 ? content.slice(0, 50) + "..." : content;
 
@@ -743,6 +746,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			turn: this.currentTurn || 1,
 			content: truncated,
 		});
+		console.log("[DEBUG] Timeline after add:", this.timeline);
 	}
 
 	/**
