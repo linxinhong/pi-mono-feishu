@@ -535,17 +535,40 @@ export class LarkClient {
 
 	/**
 	 * 上传图片
+	 * @param imagePath 图片路径
+	 * @returns image_key
 	 */
 	async uploadImage(imagePath: string): Promise<string> {
 		this.logger?.debug("Uploading image", { imagePath });
 
 		const { default: fs } = await import("fs");
-		const fileStream = fs.createReadStream(imagePath);
+		const { basename } = await import("path");
+		
+		// 检查文件是否存在（支持中文路径）
+		if (!fs.existsSync(imagePath)) {
+			throw new Error(`Image not found: ${imagePath}`);
+		}
+		
+		const imageStream = fs.createReadStream(imagePath);
+
+		// 获取文件名（处理中文文件名）
+		let imageName = basename(imagePath);
+		// 确保文件名编码正确
+		try {
+			// 如果文件名包含非法字符，使用简单名称
+			if (/[^\w\-\.\u4e00-\u9fa5]/.test(imageName)) {
+				// 保留扩展名，使用 "image" 作为基础名称
+				const ext = imageName.match(/\.\w+$/)?.[0] || ".png";
+				imageName = `image${ext}`;
+			}
+		} catch {
+			// 如果处理失败，使用原始名称
+		}
 
 		const response = await this.client.im.v1.image.create({
 			data: {
+				image: imageStream,
 				image_type: "message",
-				image: fileStream,
 			},
 		});
 
@@ -553,6 +576,7 @@ export class LarkClient {
 			throw new Error("Failed to upload image: no image_key returned");
 		}
 
+		this.logger?.debug("Image uploaded", { imageKey: response.image_key });
 		return response.image_key;
 	}
 
