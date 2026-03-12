@@ -5,7 +5,6 @@
  */
 
 import type { STTEngine, STTConfig } from "./types.js";
-import "./types.browser.js";
 
 // ============================================================================
 // Web Speech STT

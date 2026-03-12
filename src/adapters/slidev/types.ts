@@ -5,7 +5,6 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import "./types.browser.js";
 
 // ============================================================================
 // State Machine Types
