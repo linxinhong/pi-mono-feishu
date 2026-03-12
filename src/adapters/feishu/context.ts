@@ -1040,18 +1040,28 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @returns 如果错误已处理（如发送授权卡片）返回 true，否则返回 false
 	 */
 	async handleError(error: unknown): Promise<boolean> {
+		console.log("[DEBUG] handleError called with:", (error as any)?.code || (error as any)?.message);
+		
 		// 尝试提取权限错误
 		const permissionError = extractPermissionError(error);
 		if (!permissionError) {
+			console.log("[DEBUG] Not a permission error, skipping");
 			return false;
 		}
+		
+		console.log("[DEBUG] Permission error detected:", permissionError.code, permissionError.scopes);
 
 		// 检查冷却时间
 		const appId = this.larkClient["config"]?.appId || "unknown";
+		console.log("[DEBUG] Checking cooldown for app:", appId);
+		
 		if (!shouldNotifyPermissionError(appId)) {
+			console.log("[DEBUG] Skipping auth card due to cooldown");
 			this.logger?.debug("Skipping auth card due to cooldown", { appId });
 			return true;
 		}
+		
+		console.log("[DEBUG] Sending auth card...");
 
 		// 发送授权卡片
 		try {
@@ -1060,9 +1070,11 @@ export class FeishuPlatformContext implements PlatformContext {
 				code: permissionError.code, 
 				scopes: permissionError.scopes,
 			});
+			console.log("[DEBUG] Auth card sent successfully");
 			return true;
 		} catch (sendError) {
 			this.logger?.error("Failed to send auth card", undefined, sendError as Error);
+			console.log("[DEBUG] Failed to send auth card:", sendError);
 			return false;
 		}
 	}

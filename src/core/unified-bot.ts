@@ -231,17 +231,23 @@ export class UnifiedBot {
 			}
 		} catch (error) {
 			console.error("[UnifiedBot] Error handling message:", error);
+			console.log("[DEBUG] Error code:", (error as any)?.code, "Error msg:", (error as any)?.message?.slice(0, 100));
 
 			// 尝试处理权限错误（发送授权卡片）
 			if (platformContext.handleError) {
+				console.log("[DEBUG] Calling platformContext.handleError...");
 				const handled = await platformContext.handleError(error);
+				console.log("[DEBUG] handleError returned:", handled);
 				if (handled) {
 					console.log("[UnifiedBot] Permission error handled, auth card sent");
 					return;
 				}
+			} else {
+				console.log("[DEBUG] platformContext.handleError not available");
 			}
 
 			// 如果不是权限错误或处理失败，发送通用错误消息
+			console.log("[DEBUG] Sending generic error message...");
 			try {
 				const errorMessage = error instanceof Error ? error.message : String(error);
 				await platformContext.sendText(chatId, `❌ 处理消息时出错: ${errorMessage}`);
