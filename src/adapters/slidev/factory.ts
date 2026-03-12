@@ -151,5 +151,5 @@ export const slidevAdapterFactory: AdapterFactory = {
 export async function createSlidevBot(
   config: BotConfig & { slidev: SlidevAdapterConfig }
 ): Promise<Bot & { adapter: SlidevAdapter }> {
-  return slidevAdapterFactory.createBot(config) as Promise<Bot & { adapter: SlidevAdapter }>;
+  return slidevAdapterFactory.createBot!(config) as Promise<Bot & { adapter: SlidevAdapter }>;
 }

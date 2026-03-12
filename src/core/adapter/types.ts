@@ -89,10 +89,10 @@ export interface AdapterFactory {
 	readonly meta: AdapterMeta;
 
 	/**
-	 * 创建 Bot 实例
+	 * 可选：创建 Bot 实例
 	 * @param config Bot 配置
 	 */
-	createBot(config: BotConfig): Promise<Bot>;
+	createBot?(config: BotConfig): Promise<Bot>;
 
 	/**
 	 * 可选：验证配置是否有效

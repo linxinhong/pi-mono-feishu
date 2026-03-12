@@ -177,17 +177,22 @@ export async function main(options: MainOptions = {}): Promise<void> {
 			[platform]: platformConfig, // 使用平台名作为键，保留嵌套结构
 		};
 
-		// 如果 factory 支持 createServer，先设置服务器路由
-		if (factory.createServer) {
+		// 检查是否为服务器模式（支持 createServer）
+		const isServerMode = !!factory.createServer;
+
+		// 如果 factory 支持 createServer，设置服务器路由
+		if (isServerMode) {
 			log.logInfo(`Setting up server for platform: ${platform}`);
-			await factory.createServer(app, botConfig);
+			await factory.createServer!(app, botConfig);
 			hasServerAdapter = true;
 		}
 
-		// 如果 factory 支持 createBot，创建 bot
-		if (factory.createBot) {
+		// 如果 factory 支持 createBot 且不是服务器模式，创建 bot
+		// 服务器模式的 adapter（如 slidev）不创建 bot，因为需要浏览器环境
+		if (factory.createBot && !isServerMode) {
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			try {
-				const bot = await factory.createBot(botConfig);
+				const bot = await factory.createBot!(botConfig);
 				bots.push(bot);
 				log.logInfo(`Created bot for platform: ${platform}`);
 			} catch (error) {

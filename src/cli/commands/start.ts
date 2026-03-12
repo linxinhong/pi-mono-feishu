@@ -57,7 +57,7 @@ export function registerStartCommand(program: Command): void {
 				};
 
 				// 创建并启动机器人
-				const bot = await factory.createBot(botConfig);
+				const bot = await factory.createBot!(botConfig);
 				await bot.start(config.port!);
 
 				log.logConnected(["feishu"]);
