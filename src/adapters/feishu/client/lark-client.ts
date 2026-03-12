@@ -980,7 +980,7 @@ export class LarkClient {
 			const errorMsg = error?.msg ?? error?.response?.data?.msg ?? String(error);
 			
 			if (errorCode === 99991672) {
-				this.logger?.warn("Permission denied for getChatMembers", { chatId, errorMsg });
+				console.error("[PERMISSION_ERROR] getChatMembers permission denied, throwing error:", errorMsg);
 				// 重新抛出权限错误，让上层处理（发送授权卡片）
 				const permissionError = new Error(`Permission error: ${errorMsg}`);
 				(permissionError as any).code = 99991672;
@@ -1031,30 +1031,36 @@ export class LarkClient {
 	 */
 	async convertAtMentions(chatId: string, text: string): Promise<string> {
 		this.logger?.debug("Converting @ mentions", { chatId, text, cacheSize: this.chatMembersCache.get(chatId)?.size });
-		const members = await this.getChatMembers(chatId);
-		this.logger?.debug("Chat members for conversion", { members: Array.from(members.entries()) });
+		try {
+			const members = await this.getChatMembers(chatId);
+			this.logger?.debug("Chat members for conversion", { members: Array.from(members.entries()) });
 
-		// 替换 @用户名 为飞书格式
-		let result = text;
+			// 替换 @用户名 为飞书格式
+			let result = text;
 
-		// 先处理转义的 \@ -> @
-		result = result.replace(/\\@/g, "@");
+			// 先处理转义的 \@ -> @
+			result = result.replace(/\\@/g, "@");
 
-		for (const [name, openId] of members.entries()) {
-			// 匹配 @用户名（支持 @_user_5 和 @姓名 格式）
-			// 使用单词边界或特殊字符作为分隔
-			const escapedName = this.escapeRegExp(name);
-			// 匹配 @name（name 后面跟着空格、标点或字符串结尾）
-			const regex = new RegExp(`@${escapedName}(?=[\\s\\n.,;:!?]|$)`, "g");
-			const before = result;
-			result = result.replace(regex, `<at user_id="${openId}">@${name}</at>`);
-			if (result !== before) {
-				this.logger?.debug("Replaced mention", { name, openId, before: before.slice(0, 100), after: result.slice(0, 100) });
+			for (const [name, openId] of members.entries()) {
+				// 匹配 @用户名（支持 @_user_5 和 @姓名 格式）
+				// 使用单词边界或特殊字符作为分隔
+				const escapedName = this.escapeRegExp(name);
+				// 匹配 @name（name 后面跟着空格、标点或字符串结尾）
+				const regex = new RegExp(`@${escapedName}(?=[\\s\\n.,;:!?]|$)`, "g");
+				const before = result;
+				result = result.replace(regex, `<at user_id="${openId}">@${name}</at>`);
+				if (result !== before) {
+					this.logger?.debug("Replaced mention", { name, openId, before: before.slice(0, 100), after: result.slice(0, 100) });
+				}
 			}
-		}
 
-		this.logger?.debug("Converted result", { result });
-		return result;
+			this.logger?.debug("Converted result", { result });
+			return result;
+		} catch (error) {
+			console.error("[PERMISSION_ERROR] convertAtMentions caught error:", (error as any)?.code, (error as any)?.message);
+			// 重新抛出权限错误，让上层处理
+			throw error;
+		}
 	}
 
 	/**
