@@ -80,6 +80,10 @@ export class FeishuPlatformContext implements PlatformContext {
 	private toolCardUpdateTimer?: NodeJS.Timeout;
 	private readonly TOOL_CARD_DEBOUNCE_MS = 500; // 防抖时间
 
+	// 流式卡片更新缓存（避免内容无变化时重复更新）
+	private lastStreamingContent: string = "";
+	private lastStreamingTimelineHash: string = "";
+
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
@@ -335,11 +339,19 @@ export class FeishuPlatformContext implements PlatformContext {
 	async updateStreaming(content: string): Promise<void> {
 		const timeline = this.getTimeline();
 
+		// 计算 timeline 的简单哈希（用于快速比较）
+		const timelineHash = this.computeTimelineHash(timeline);
+
+		// 检查内容是否有实质性变化
+		if (content === this.lastStreamingContent && timelineHash === this.lastStreamingTimelineHash) {
+			this.logger?.debug("Streaming content unchanged, skipping card update");
+			return;
+		}
+
 		// 调试日志
 		console.log("[DEBUG] updateStreaming:", {
 			contentLength: content?.length || 0,
 			timelineCount: timeline?.length || 0,
-			timeline: timeline,
 		});
 
 		// 如果已有卡片，尝试更新
@@ -348,6 +360,9 @@ export class FeishuPlatformContext implements PlatformContext {
 				const card = this.cardBuilder.buildStreamingCard(content, { timeline });
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "streaming";
+				// 更新缓存
+				this.lastStreamingContent = content;
+				this.lastStreamingTimelineHash = timelineHash;
 				return;
 			} catch (error: any) {
 				// 检查是否是速率限制错误 (230020)
@@ -369,6 +384,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			const messageId = await this.messageSender.sendCard(this.chatId, card, this.quoteMessageId || undefined);
 			this.currentCardMessageId = messageId;
 			this.currentCardStatus = "streaming";
+			// 更新缓存
+			this.lastStreamingContent = content;
+			this.lastStreamingTimelineHash = timelineHash;
 		} catch (error: any) {
 			// 检查是否是速率限制错误
 			const errorMsg = String(error?.message || error);
@@ -411,6 +429,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.toolCalls = []; // 清空工具调用
 				this.timeline = []; // 清空时间线
 				this.pendingContent = ""; // 清空累积内容
+				this.lastStreamingContent = ""; // 清空流式缓存
+				this.lastStreamingTimelineHash = ""; // 清空时间线哈希缓存
 				return;
 			} catch (error) {
 				this.logger?.error("Failed to update final card", undefined, error as Error);
@@ -425,6 +445,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.toolCalls = [];
 		this.timeline = []; // 清空时间线
 		this.pendingContent = ""; // 清空累积内容
+		this.lastStreamingContent = ""; // 清空流式缓存
+		this.lastStreamingTimelineHash = ""; // 清空时间线哈希缓存
 	}
 
 	// ========================================================================
@@ -756,11 +778,24 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 截断思考内容（最多显示 50 个字符）
 		const truncated = content.length > 50 ? content.slice(0, 50) + "..." : content;
 
-		this.timeline.push({
-			type: "thinking",
-			turn: this.currentTurn || 1,
-			content: truncated,
-		});
+		const currentTurn = this.currentTurn || 1;
+		
+		// 查找当前 turn 是否已有 thinking 条目
+		const existingIndex = this.timeline.findIndex(
+			event => event.type === "thinking" && event.turn === currentTurn
+		);
+		
+		if (existingIndex >= 0) {
+			// 更新现有条目
+			this.timeline[existingIndex].content = truncated;
+		} else {
+			// 添加新条目
+			this.timeline.push({
+				type: "thinking",
+				turn: currentTurn,
+				content: truncated,
+			});
+		}
 		console.log("[DEBUG] Timeline after add:", this.timeline);
 	}
 
@@ -866,6 +901,14 @@ export class FeishuPlatformContext implements PlatformContext {
 		const firstKey = keys[0];
 		const value = String(args[firstKey]);
 		return value.length > 50 ? value.substring(0, 50) + "..." : value;
+	}
+
+	/**
+	 * 计算时间线哈希（用于快速比较变化）
+	 */
+	private computeTimelineHash(timeline: TimelineEvent[]): string {
+		if (timeline.length === 0) return "";
+		return timeline.map(e => `${e.turn}:${e.type}:${e.content?.slice(0, 20)}:${e.status || ""}`).join("|");
 	}
 
 	/**
