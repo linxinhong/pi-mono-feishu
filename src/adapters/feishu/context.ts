@@ -132,8 +132,20 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	async sendText(chatId: string, text: string): Promise<string> {
 		// 转换 @用户名 为飞书格式
-		const convertedText = await this.larkClient.convertAtMentions(chatId, text);
-		return await this.messageSender.sendText(chatId, convertedText);
+		try {
+			const convertedText = await this.larkClient.convertAtMentions(chatId, text);
+			return await this.messageSender.sendText(chatId, convertedText);
+		} catch (error: any) {
+			// 检查是否是权限错误 (code 99991672)
+			const errorCode = error?.code ?? error?.response?.data?.code;
+			if (errorCode === 99991672) {
+				this.logger?.warn("Permission error in sendText, re-throwing for auth card", { chatId, errorMsg: error?.message });
+				throw error;
+			}
+			// 其他错误，降级为直接发送原文本（不转换 @提及）
+			this.logger?.warn("Failed to convert @ mentions, sending original text", { chatId, error: String(error) });
+			return await this.messageSender.sendText(chatId, text);
+		}
 	}
 
 	async updateMessage(messageId: string, content: string): Promise<void> {
@@ -193,15 +205,26 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async sendCard(chatId: string, card: any): Promise<string> {
 		// 转换卡片内容中的 @用户名
-		if (card?.body?.elements) {
-			for (const element of card.body.elements) {
-				if (element.text?.content) {
-					element.text.content = await this.larkClient.convertAtMentions(chatId, element.text.content);
-				}
-				if (element.content) {
-					element.content = await this.larkClient.convertAtMentions(chatId, element.content);
+		try {
+			if (card?.body?.elements) {
+				for (const element of card.body.elements) {
+					if (element.text?.content) {
+						element.text.content = await this.larkClient.convertAtMentions(chatId, element.text.content);
+					}
+					if (element.content) {
+						element.content = await this.larkClient.convertAtMentions(chatId, element.content);
+					}
 				}
 			}
+		} catch (error: any) {
+			// 检查是否是权限错误 (code 99991672)
+			const errorCode = error?.code ?? error?.response?.data?.code;
+			if (errorCode === 99991672) {
+				this.logger?.warn("Permission error in sendCard, re-throwing for auth card", { chatId, errorMsg: error?.message });
+				throw error;
+			}
+			// 其他错误，继续发送不转换的卡片
+			this.logger?.warn("Failed to convert @ mentions in card, sending original", { chatId, error: String(error) });
 		}
 		return await this.messageSender.sendCard(chatId, card);
 	}
@@ -590,6 +613,14 @@ export class FeishuPlatformContext implements PlatformContext {
 			} catch (error: any) {
 				const errorMsg = String(error?.message || error);
 				const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
+				const errorCode = error?.code ?? error?.response?.data?.code;
+				
+				// 检查是否是权限错误 (code 99991672) - 需要重新抛出以显示授权卡片
+				if (errorCode === 99991672) {
+					this.logger?.warn("Permission error in finishStreaming, re-throwing for auth card", { errorMsg });
+					throw error;
+				}
+				
 				if (!isRateLimit) {
 					this.logger?.error("Failed to update final card", undefined, error as Error);
 				}
