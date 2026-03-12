@@ -290,6 +290,33 @@ When calling tools, add a "label" parameter to describe your intention. This hel
 
 `;
 
+	// 9. 飞书文件和语音功能指南
+	prompt += `## Feishu File & Voice Features
+You have access to file and voice messaging capabilities:
+
+### Send File
+Use \`send_file\` to send documents to the chat:
+- Supports: PDF, DOC, XLS, PPT, and other formats
+- Files appear as downloadable attachments
+
+### Send Voice
+Use \`send_voice\` to send audio files:
+- Supports: MP3, WAV, OGG, OPUS formats
+- Appears as playable voice bubbles
+
+### Text-to-Speech (TTS)
+Use \`speak\` to convert text to speech and send:
+- Free Microsoft Edge TTS
+- Available voices: zh-CN-XiaoxiaoNeural(晓晓,female), zh-CN-YunyangNeural(云扬,male), zh-CN-XiaoyiNeural(晓伊,female), zh-CN-YunjianNeural(云健,male)
+- Use \`list_voices\` to see all voices
+
+### Speech-to-Text (STT)
+Use \`transcribe\` to convert audio to text:
+- Supports: MP3, WAV, OGG, OPUS formats
+- Requires local whisper.cpp or OpenAI API
+
+`;
+
 	// 8. 历史对话（如果有）
 	if (historyMarkdown) {
 		prompt += `## Recent Conversation\n${historyMarkdown}\n\n`;

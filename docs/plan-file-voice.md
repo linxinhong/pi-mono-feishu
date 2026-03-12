@@ -287,8 +287,55 @@ async sendVoiceMessage(chatId: string, filePath: string): Promise<string> {
 | 大文件上传超时 | 分片上传或增加超时配置 |
 | 飞书 API 限制 | 添加重试机制和错误处理 |
 
-## 7. 下一步行动
+## 7. 完成状态
 
-1. **确认优先级**：文件发送和语音发送哪个优先？
-2. **技术选型**：是否需要支持音频格式转换？使用什么工具？
-3. **开始实施**：按照阶段 1 开始编码
+| 阶段 | 状态 | 说明 |
+|------|------|------|
+| 阶段 1：完善文件发送功能 | ✅ 完成 | uploadFile 增强，支持文件类型检测和时长参数 |
+| 阶段 1.5：TTS/STT 基础架构 | ✅ 完成 | EdgeTTS、WhisperSTT、VoiceManager 实现 |
+| 阶段 2：实现语音消息功能 | ✅ 完成 | sendAudio 方法，音频时长解析工具 |
+| 阶段 3：工具集成 | ✅ 完成 | send_file、send_voice、speak、list_voices、transcribe 工具 |
+| 阶段 4：测试和文档 | ✅ 完成 | 系统提示词更新，支持 AI 使用新功能 |
+
+## 8. 使用指南
+
+### 文件发送
+```
+AI: 我将发送这个文件给你
+[使用 send_file 工具]
+```
+
+### 语音发送
+```
+AI: 我来发一段语音
+[使用 send_voice 工具]
+```
+
+### 文字转语音
+```
+用户: 用语音回复我
+AI: [使用 speak 工具]
+```
+
+### 语音转文字
+```
+用户: [发送语音]
+AI: [使用 transcribe 工具识别语音内容]
+```
+
+## 9. 依赖安装
+
+### Edge TTS（文字转语音）
+```bash
+pip install edge-tts
+```
+
+### Whisper（语音转文字）
+```bash
+# 方案 1：OpenAI API（云端）
+export OPENAI_API_KEY=your_key
+
+# 方案 2：本地 whisper.cpp
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp && make
+```
