@@ -38,7 +38,23 @@ export function extractPermissionError(err: unknown): PermissionError | null {
 		return null;
 	}
 
-	const error = err as any;
+	let error = err as any;
+	
+	// 处理嵌套数组格式（如 [[axiosError, feishuError]]）
+	if (Array.isArray(error)) {
+		// 展平一层嵌套数组
+		const flattened = error.flat();
+		// 查找包含 99991672 错误的对象
+		for (const item of flattened) {
+			if (item && typeof item === "object") {
+				const itemCode = item?.code || item?.response?.data?.code;
+				if (itemCode === 99991672) {
+					error = item;
+					break;
+				}
+			}
+		}
+	}
 	
 	// 检查是否是飞书 API 错误
 	const code = error?.code || error?.response?.data?.code;
