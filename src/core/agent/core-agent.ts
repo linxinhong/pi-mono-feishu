@@ -370,7 +370,7 @@ export class CoreAgent {
 				await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
 			} else {
 				// Agent 已存在，更新 thinkingLevel（因为 hideThinking 可能在 startThinking 中改变了）
-				const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
+				const hideThinking = (platformContext as any).isThinkingHidden?.() ?? false;
 				state.agent.setThinkingLevel(hideThinking ? "off" : "medium");
 			}
 
@@ -775,8 +775,8 @@ export class CoreAgent {
 		// 创建 ModelRegistry（必须在 Agent 之前，因为 getApiKey 需要用到）
 		state.modelRegistry = this.config.modelManager.getRegistry();
 
-		// 检查是否隐藏思考过程
-		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
+		// 检查是否隐藏思考过程（默认显示思考）
+		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? false;
 
 		// 创建带 Markdown 转换和截断的 convertToLlm 函数
 		// 策略：将历史消息转换为 Markdown 格式，保留最近消息为原始格式

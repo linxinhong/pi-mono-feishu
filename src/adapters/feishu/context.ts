@@ -58,7 +58,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	// 思考中卡片状态
 	private thinkingStartTime: number | null = null;
-	private hideThinking: boolean = true;
+	private hideThinking: boolean = false; // 默认显示思考
 
 	// 思考内容（流式累积）
 	private thinkingContent: string = "";
