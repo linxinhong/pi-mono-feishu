@@ -6,6 +6,8 @@
 
 import type { PlatformTool } from "../../../core/platform/tools/types.js";
 import type { FeishuPlatformContext } from "../context.js";
+import { existsSync } from "fs";
+import { resolve } from "path";
 
 /**
  * 创建发送文件工具
@@ -36,8 +38,22 @@ export function createSendFileTool(context: FeishuPlatformContext): PlatformTool
 		},
 		execute: async (_toolCallId: string, params: any) => {
 			try {
-				const { file_path, description } = params;
+				let { file_path, description } = params;
 				const chatId = context["chatId"];
+
+				// 去除路径中的多余空格
+				file_path = file_path.trim();
+				
+				// 解析为绝对路径
+				file_path = resolve(file_path);
+
+				// 检查文件是否存在
+				if (!existsSync(file_path)) {
+					return {
+						content: [{ type: "text", text: `文件不存在: ${file_path}` }],
+						details: { success: false, error: "File not found", file_path },
+					};
+				}
 
 				// 上传并发送文件
 				await context.uploadFile(file_path, chatId);

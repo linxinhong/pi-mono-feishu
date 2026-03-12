@@ -498,11 +498,20 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	async updateThinking(content: string): Promise<void> {
-		console.log("[DEBUG] updateThinking called with:", content.slice(0, 50), "current thinkingContent:", this.thinkingContent.slice(0, 50));
+		// 只有当内容有变化且非空才处理
+		if (!content || content === this.thinkingContent) {
+			return;
+		}
+
+		// 检查内容是否有实质性变化（至少新增10个字符或完全不同的内容）
+		const contentChanged = content.length > this.thinkingContent.length + 10 || 
+		                       !content.startsWith(this.thinkingContent);
 		
-		// 只有当内容有变化且非空时才添加到时间线
-		if (content && content !== this.thinkingContent) {
-			console.log("[DEBUG] Adding to timeline");
+		// 更新思考内容
+		this.thinkingContent = content;
+		
+		// 只有当内容有实质性变化时才添加到时间线
+		if (contentChanged) {
 			this.addThinkingToTimeline(content);
 		}
 
@@ -510,9 +519,6 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (this.hideThinking) {
 			return;
 		}
-
-		// 累积思考内容
-		this.thinkingContent = content;
 
 		// 使用防抖更新工具卡片
 		if (this.cardIds.toolCardId) {
@@ -528,13 +534,10 @@ export class FeishuPlatformContext implements PlatformContext {
 					// 思考过程中展开折叠面板
 					const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
 					await this.messageSender.updateCard(this.cardIds.toolCardId!, toolCard);
-					console.log("[DEBUG] Tool card updated with thinking");
 				} catch (error: any) {
 					const errorMsg = String(error?.message || error);
 					if (!errorMsg.includes("230020") && error?.code !== 230020) {
 						this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
-					} else {
-						this.logger?.debug("Tool card update rate limited, skipping");
 					}
 				}
 			}, this.TOOL_CARD_DEBOUNCE_MS);
