@@ -970,9 +970,14 @@ export class LarkClient {
 			// 通过消息中已有的 mention 信息来建立映射
 			this.logger?.debug("Chat members fetch not fully implemented, using message mentions");
 		} catch (error: any) {
+			// 调试：打印错误结构
+			console.error("[DEBUG] getChatMembers error:", JSON.stringify(error, null, 2)?.slice(0, 500));
+			
 			// 使用统一的权限错误检测
 			const { extractPermissionError } = await import("../utils/permission-error.js");
 			const permError = extractPermissionError(error);
+			
+			console.error("[DEBUG] extractPermissionError result:", permError);
 			
 			if (permError) {
 				console.error("[PERMISSION_ERROR] getChatMembers permission denied, throwing error:", permError.message);
