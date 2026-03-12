@@ -14,7 +14,9 @@ import type {
 	STTResult,
 } from "./types.js";
 import { EdgeTTS } from "./edge-tts.js";
+import { DashScopeTTS } from "./dashscope-tts.js";
 import { WhisperSTT } from "./whisper-stt.js";
+import { DashScopeSTT } from "./dashscope-stt.js";
 
 // ============================================================================
 // Voice Manager
@@ -42,12 +44,18 @@ export class VoiceManager {
 		// 注册 Edge TTS（免费）
 		this.registerTTS(new EdgeTTS());
 
+		// 注册 DashScope TTS（阿里云）
+		this.registerTTS(new DashScopeTTS());
+
 		// 注册 Whisper STT（支持本地和 API）
 		this.registerSTT(
 			new WhisperSTT({
 				apiKey: process.env.OPENAI_API_KEY,
 			})
 		);
+
+		// 注册 DashScope STT（阿里云）
+		this.registerSTT(new DashScopeSTT());
 	}
 
 	/**

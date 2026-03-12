@@ -14,7 +14,7 @@ export function createSTTTool(): PlatformTool {
 	return {
 		name: "transcribe",
 		label: "📝 语音转文字",
-		description: "将语音文件转换为文字。支持中文、英文等多种语言。需要本地安装 whisper.cpp 或配置 OpenAI API。",
+		description: "将语音文件转换为文字。支持两种引擎：\n1. Whisper（本地或 OpenAI API）\n2. DashScope ASR（阿里云，推荐中文识别）\n默认使用 Whisper，如需使用 DashScope 请设置 provider 参数。",
 		parameters: {
 			type: "object",
 			properties: {
@@ -24,7 +24,12 @@ export function createSTTTool(): PlatformTool {
 				},
 				language: {
 					type: "string",
-					description: "音频语言代码，如 'zh'(中文), 'en'(英文)。默认自动检测",
+					description: "音频语言代码，如 'zh'(中文), 'en'(英文)。默认 'zh'",
+				},
+				provider: {
+					type: "string",
+					description: "STT 引擎提供商: 'whisper'(默认) 或 'dashscope'(阿里云，推荐中文)",
+					default: "whisper",
 				},
 			},
 			required: ["audio_path"],
@@ -36,13 +41,14 @@ export function createSTTTool(): PlatformTool {
 		},
 		execute: async (_toolCallId: string, params: any) => {
 			try {
-				const { audio_path, language = "zh" } = params;
+				const { audio_path, language = "zh", provider = "whisper" } = params;
 
 				// 使用 VoiceManager 进行识别
 				const voiceManager = getVoiceManager();
 				const result = await voiceManager.transcribe({
 					audioPath: audio_path,
 					language,
+					provider,
 				});
 
 				// 格式化结果

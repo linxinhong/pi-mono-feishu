@@ -17,7 +17,7 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 	return {
 		name: "speak",
 		label: "🔊 文字转语音",
-		description: "将文字转换为语音并发送到聊天。使用微软 Edge TTS（免费），支持多种中文音色。",
+		description: "将文字转换为语音并发送到聊天。支持两种引擎：\n1. Edge TTS（免费，无需配置）- 音色：晓晓、云扬等\n2. DashScope TTS（阿里云）- 音色：Cherry、Serena、Ethan等\n默认使用 Edge TTS，如需使用 DashScope 请设置 provider 参数。",
 		parameters: {
 			type: "object",
 			properties: {
@@ -27,13 +27,18 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 				},
 				voice: {
 					type: "string",
-					description: "音色 ID。可选: zh-CN-XiaoxiaoNeural(晓晓,女), zh-CN-YunyangNeural(云扬,男), zh-CN-XiaoyiNeural(晓伊,女), zh-CN-YunjianNeural(云健,男)。默认晓晓",
+					description: "音色 ID。Edge: zh-CN-XiaoxiaoNeural(晓晓), zh-CN-YunyangNeural(云扬)等; DashScope: Cherry, Serena, Ethan等。默认晓晓",
 					default: "zh-CN-XiaoxiaoNeural",
 				},
 				speed: {
 					type: "number",
 					description: "语速，范围 0.5-2.0，默认 1.0",
 					default: 1.0,
+				},
+				provider: {
+					type: "string",
+					description: "TTS 引擎提供商: 'edge'(默认,免费) 或 'dashscope'(阿里云)",
+					default: "edge",
 				},
 			},
 			required: ["text"],
@@ -45,7 +50,7 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 		},
 		execute: async (_toolCallId: string, params: any) => {
 			try {
-				const { text, voice = "zh-CN-XiaoxiaoNeural", speed = 1.0 } = params;
+				const { text, voice = "zh-CN-XiaoxiaoNeural", speed = 1.0, provider = "edge" } = params;
 				const chatId = context["chatId"];
 
 				// 限制文本长度
@@ -67,6 +72,7 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 					speed,
 					outputPath: tempPath,
 					format: "opus",
+					provider,
 				});
 
 				// 发送语音消息
@@ -119,13 +125,22 @@ export function createListVoicesTool(): PlatformTool {
 				const voiceManager = getVoiceManager();
 				const voices = voiceManager.getAllVoices();
 
-				const voiceList = voices
-					.filter((v) => v.provider === "edge")
-					.map((v) => `${v.voice}: ${v.name}${v.description ? ` (${v.description})` : ""}`)
+				// 按提供商分组
+				const edgeVoices = voices.filter((v) => v.provider === "edge");
+				const dashscopeVoices = voices.filter((v) => v.provider === "dashscope");
+
+				let message = "**Edge TTS（免费，无需配置）**\n";
+				message += edgeVoices
+					.map((v) => `- ${v.voice}: ${v.name}${v.description ? ` (${v.description})` : ""}`)
+					.join("\n");
+
+				message += "\n\n**DashScope TTS（阿里云，需配置 API Key）**\n";
+				message += dashscopeVoices
+					.map((v) => `- ${v.voice}: ${v.name}${v.description ? ` (${v.description})` : ""}`)
 					.join("\n");
 
 				return {
-					content: [{ type: "text", text: `可用音色:\n${voiceList}` }],
+					content: [{ type: "text", text: message }],
 					details: { success: true, voices },
 				};
 			} catch (error: any) {

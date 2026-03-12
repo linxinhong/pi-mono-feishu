@@ -19,7 +19,9 @@ export type {
 
 // Providers
 export { EdgeTTS } from "./edge-tts.js";
+export { DashScopeTTS } from "./dashscope-tts.js";
 export { WhisperSTT } from "./whisper-stt.js";
+export { DashScopeSTT } from "./dashscope-stt.js";
 
 // Manager
 export { VoiceManager, getVoiceManager, setVoiceManager } from "./manager.js";
