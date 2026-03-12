@@ -927,7 +927,20 @@ export class LarkClient {
 			// 由于 batchGetId 需要具体的用户 ID，我们使用另一种方式
 			// 通过消息中已有的 mention 信息来建立映射
 			this.logger?.debug("Chat members fetch not fully implemented, using message mentions");
-		} catch (error) {
+		} catch (error: any) {
+			// 检查是否是权限错误 (code 99991672)
+			const errorCode = error?.code ?? error?.response?.data?.code;
+			const errorMsg = error?.msg ?? error?.response?.data?.msg ?? String(error);
+			
+			if (errorCode === 99991672) {
+				this.logger?.warn("Permission denied for getChatMembers", { chatId, errorMsg });
+				// 重新抛出权限错误，让上层处理（发送授权卡片）
+				const permissionError = new Error(`Permission error: ${errorMsg}`);
+				(permissionError as any).code = 99991672;
+				(permissionError as any).response = { data: { code: 99991672, msg: errorMsg } };
+				throw permissionError;
+			}
+			
 			this.logger?.warn("Failed to fetch chat members", { chatId, error: String(error) });
 		}
 

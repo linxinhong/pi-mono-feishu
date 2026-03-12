@@ -554,6 +554,13 @@ export class CoreAgent {
 							resolve(finalResponse);
 						}
 					} catch (error) {
+						// 检查是否是权限错误，如果是则重新抛出让上层处理
+						const errorCode = (error as any)?.code ?? (error as any)?.response?.data?.code;
+						const errorMsg = String(error);
+						if (errorCode === 99991672 || errorMsg.includes("99991672")) {
+							log.logError(`[Agent] Permission error in event handler, re-throwing: ${error}`);
+							throw error;
+						}
 						log.logError(`[Agent] Event handler error: ${error}`);
 					}
 				});
