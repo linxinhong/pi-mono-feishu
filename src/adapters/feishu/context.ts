@@ -23,6 +23,7 @@ export interface FeishuPlatformContextOptions {
 	messageSender: MessageSender;
 	store: FeishuStore;
 	logger?: PiLogger;
+	quoteMessageId?: string;
 }
 
 // ============================================================================
@@ -99,6 +100,11 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.store = options.store;
 		this.logger = options.logger;
 		this.cardBuilder = new CardBuilder();
+		
+		// 设置引用消息 ID（如果提供）
+		if (options.quoteMessageId) {
+			this.quoteMessageId = options.quoteMessageId;
+		}
 	}
 
 	/**

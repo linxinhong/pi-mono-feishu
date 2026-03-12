@@ -288,13 +288,14 @@ export class FeishuAdapter implements PlatformAdapter {
 		this.messageHandlers.push(handler);
 	}
 
-	createPlatformContext(chatId: string): PlatformContext {
+	createPlatformContext(chatId: string, quoteMessageId?: string): PlatformContext {
 		if (!this.larkClient || !this.messageSender) {
 			throw new Error("FeishuAdapter not initialized");
 		}
 
-		// 尝试从缓存获取
-		let context = this.contextCache.get(chatId);
+		// 尝试从缓存获取（quoteMessageId 不同时需要重新创建）
+		const cacheKey = `${chatId}:${quoteMessageId || ""}`;
+		let context = this.contextCache.get(cacheKey);
 
 		if (!context) {
 			// 创建新实例并缓存
@@ -304,8 +305,9 @@ export class FeishuAdapter implements PlatformAdapter {
 				messageSender: this.messageSender,
 				store: this.store!,
 				logger: this.logger,
+				quoteMessageId,
 			});
-			this.contextCache.set(chatId, context);
+			this.contextCache.set(cacheKey, context);
 		}
 
 		return context;

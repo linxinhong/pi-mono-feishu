@@ -106,8 +106,9 @@ export interface PlatformAdapter {
 	/**
 	 * 创建平台上下文（用于 Agent）
 	 * @param chatId 聊天 ID
+	 * @param quoteMessageId 可选的引用消息 ID，用于回复时引用原消息
 	 */
-	createPlatformContext(chatId: string): PlatformContext;
+	createPlatformContext(chatId: string, quoteMessageId?: string): PlatformContext;
 
 	/**
 	 * 检查频道是否正在运行

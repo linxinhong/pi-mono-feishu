@@ -105,8 +105,8 @@ export class StdioTransport implements McpTransport {
         this.emitClose();
         
         // 拒绝所有待处理的请求
-        for (const [id, { reject }] of this.pendingRequests) {
-          reject(new Error(`Process exited with code ${code}`));
+        for (const [id, handlers] of this.pendingRequests) {
+          handlers.reject(new Error(`Process exited with code ${code}`));
         }
         this.pendingRequests.clear();
       });
@@ -125,8 +125,8 @@ export class StdioTransport implements McpTransport {
     if (!this.process) return;
 
     // 拒绝所有待处理的请求
-    for (const [id, { reject }] of this.pendingRequests) {
-      reject(new Error("Transport disconnected"));
+    for (const [id, handlers] of this.pendingRequests) {
+      handlers.reject(new Error("Transport disconnected"));
     }
     this.pendingRequests.clear();
 
@@ -325,8 +325,8 @@ export class HttpSseTransport implements McpTransport {
     this.connected = false;
 
     // 拒绝所有待处理的请求
-    for (const [id, { reject }] of this.pendingRequests) {
-      reject(new Error("Transport disconnected"));
+    for (const [id, handlers] of this.pendingRequests) {
+      handlers.reject(new Error("Transport disconnected"));
     }
     this.pendingRequests.clear();
   }

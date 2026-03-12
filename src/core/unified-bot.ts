@@ -203,8 +203,8 @@ export class UnifiedBot {
 			});
 		}
 
-		// 创建平台上下文
-		const platformContext = this.adapter.createPlatformContext(message.chat.id);
+		// 创建平台上下文（传入消息 ID 用于引用回复）
+		const platformContext = this.adapter.createPlatformContext(message.chat.id, message.id);
 
 		// 处理消息
 		const response = await this.coreAgent.processMessage(message, platformContext, {
@@ -251,7 +251,7 @@ export class UnifiedBot {
 			timestamp: new Date(),
 		};
 
-		// 创建平台上下文
+		// 创建平台上下文（事件触发无原消息可引用）
 		const platformContext = this.adapter.createPlatformContext(channelId);
 
 		// 让 Agent 处理
