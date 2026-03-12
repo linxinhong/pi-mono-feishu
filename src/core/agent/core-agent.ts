@@ -33,6 +33,7 @@ import type { EventsWatcher } from "../services/event/watcher.js";
 import type { HookManager } from "../hook/manager.js";
 import { HOOK_NAMES } from "../hook/index.js";
 import type { ConfigManager } from "../config/manager.js";
+import type { McpManager } from "../mcp/manager.js";
 
 // ============================================================================
 // Types
@@ -58,6 +59,8 @@ export interface AgentConfig {
 	adapterDefaultModel?: string;
 	/** 事件监控器 */
 	eventsWatcher?: EventsWatcher;
+	/** MCP 管理器 */
+	mcpManager?: McpManager;
 }
 
 /**
@@ -684,6 +687,19 @@ export class CoreAgent {
 				}
 			} catch (error) {
 				log.logError(`[Agent] Failed to load platform tools: ${error}`);
+			}
+		}
+
+		// 添加 MCP 工具
+		if (this.config.mcpManager) {
+			try {
+				const mcpTools = await this.config.mcpManager.getAllTools();
+				if (mcpTools && mcpTools.length > 0) {
+					baseTools.push(...mcpTools);
+					log.logInfo(`[Agent] Added ${mcpTools.length} MCP tools`);
+				}
+			} catch (error) {
+				log.logError(`[Agent] Failed to load MCP tools: ${error}`);
 			}
 		}
 

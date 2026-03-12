@@ -7,6 +7,7 @@ import { homedir } from "os";
 import { join } from "path";
 import type { PluginsConfig } from "../plugins/types.js";
 import type { SandboxConfig } from "../core/sandbox/index.js";
+import type { McpServerConfig } from "../core/mcp/types.js";
 
 // ============================================================================
 // 路径常量
@@ -53,7 +54,16 @@ const RESERVED_CONFIG_KEYS = [
 	"plugins",
 	"sandbox",
 	"model",
+	"mcp",
 ] as const;
+
+/** MCP 配置 */
+export interface McpConfig {
+	/** 是否启用 MCP */
+	enabled?: boolean;
+	/** MCP 服务器列表 */
+	servers?: McpServerConfig[];
+}
 
 /** 通用配置 */
 export interface CommonConfig {
@@ -62,6 +72,8 @@ export interface CommonConfig {
 	plugins?: PluginsConfig;
 	sandbox?: SandboxConfig;
 	model?: string;
+	/** MCP 配置 */
+	mcp?: McpConfig;
 }
 
 /** 平台配置基础接口 */

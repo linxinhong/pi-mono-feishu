@@ -303,13 +303,13 @@ export class CardBuilder {
 	private buildTimelineList(timeline: TimelineEvent[]): CardElement {
 		const lines = timeline.map(event => {
 			if (event.type === "thinking") {
-				return `thinking: \`${event.content}\``;
+				return `• ${event.content}`;
 			} else {
 				const statusIcon = event.status === "success" ? "✅" :
 				                   event.status === "error" ? "❌" :
 				                   event.status === "running" ? "🔄" : "⏳";
-				const argsDisplay = event.args ? ` \`${event.args}\`` : "";
-				return `${statusIcon} ${event.content}${argsDisplay}`;
+				const argsDisplay = event.args ? ` (${event.args})` : "";
+				return `• Used **${event.content}**${argsDisplay} ${statusIcon}`;
 			}
 		});
 
@@ -344,16 +344,13 @@ export class CardBuilder {
 			// 添加该轮的事件
 			events.forEach(event => {
 				if (event.type === "thinking") {
-					turnLines.push(`thinking: \`${event.content}\``);
+					// 思考内容使用 • 符号，类似 Kimi 的格式
+					turnLines.push(`• ${event.content}`);
 				} else {
 					const statusIcon = this.getStatusIcon(event.status);
-					// 如果有 label，显示 label 作为标题
-					if (event.label) {
-						turnLines.push(`**${event.label}**`);
-					}
-					// 显示工具名和参数
-					const argsDisplay = event.args ? ` ${event.args}` : "";
-					turnLines.push(`${event.content}:${argsDisplay} ${statusIcon}`);
+					// 工具调用使用 "Used ToolName (args)" 格式
+					const argsDisplay = event.args ? ` (${event.args})` : "";
+					turnLines.push(`• Used **${event.content}**${argsDisplay} ${statusIcon}`);
 				}
 			});
 

@@ -16,6 +16,8 @@ import { EventsWatcher } from "./services/event/index.js";
 import { getHookManager, HOOK_NAMES } from "./hook/index.js";
 import { ConfigManager } from "./config/manager.js";
 import { logMessageReceive, logMessageReply } from "../utils/logger/console.js";
+import { createMcpManager, McpManager } from "./mcp/index.js";
+import type { McpConfig } from "../utils/config.js";
 import { join } from "path";
 
 // ============================================================================
@@ -58,6 +60,7 @@ export class UnifiedBot {
 	private workingDir: string;
 	private eventsWatcher: EventsWatcher | null = null;
 	private warmupChannels: string[];
+	private mcpManager: McpManager | null = null;
 
 	constructor(config: UnifiedBotConfig) {
 		this.workingDir = config.workingDir;
@@ -73,6 +76,9 @@ export class UnifiedBot {
 		} catch {
 			// ConfigManager 未初始化，使用旧模式
 		}
+
+		// 初始化 MCP 管理器
+		this.mcpManager = this.initMcpManager(configManager);
 
 		// 创建模型管理器（使用配置中的默认模型）
 		this.modelManager = new ModelManager(undefined, config.defaultModel);
@@ -107,6 +113,7 @@ export class UnifiedBot {
 			adapterDefaultModel,
 			hookManager: getHookManager(),
 			eventsWatcher: this.eventsWatcher,
+			mcpManager: this.mcpManager || undefined,
 		});
 
 		// 设置模型变更回调：当模型切换时销毁 Agent 状态
@@ -122,6 +129,15 @@ export class UnifiedBot {
 
 	async start(port?: number): Promise<void> {
 		await this.adapter.start();
+
+		// 启动 MCP 管理器
+		if (this.mcpManager) {
+			try {
+				await this.mcpManager.initialize();
+			} catch (error) {
+				console.error("[UnifiedBot] Failed to initialize MCP manager:", error);
+			}
+		}
 
 		// 启动事件监控（已在构造函数中创建）
 		if (this.eventsWatcher) {
@@ -142,6 +158,16 @@ export class UnifiedBot {
 		if (this.eventsWatcher) {
 			this.eventsWatcher.stop();
 			this.eventsWatcher = null;
+		}
+
+		// 关闭 MCP 管理器
+		if (this.mcpManager) {
+			try {
+				await this.mcpManager.shutdown();
+			} catch (error) {
+				console.error("[UnifiedBot] Error shutting down MCP manager:", error);
+			}
+			this.mcpManager = null;
 		}
 
 		await this.adapter.stop();
