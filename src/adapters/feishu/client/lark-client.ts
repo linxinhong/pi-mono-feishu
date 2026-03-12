@@ -558,19 +558,27 @@ export class LarkClient {
 
 	/**
 	 * 上传文件
+	 * @param filePath 文件路径
+	 * @param fileType 文件类型（可选，自动检测）
+	 * @param duration 音频/视频时长（毫秒，可选）
+	 * @returns file_key
 	 */
-	async uploadFile(filePath: string): Promise<string> {
-		this.logger?.debug("Uploading file", { filePath });
+	async uploadFile(filePath: string, fileType?: string, duration?: number): Promise<string> {
+		this.logger?.debug("Uploading file", { filePath, fileType, duration });
 
 		const { default: fs } = await import("fs");
-		const { basename } = await import("path");
+		const { basename, extname } = await import("path");
 		const fileStream = fs.createReadStream(filePath);
+
+		// 自动检测文件类型
+		const detectedType = (fileType || this.detectFileType(filePath)) as "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
 
 		const response = await this.client.im.v1.file.create({
 			data: {
-				file_type: "stream",
+				file_type: detectedType,
 				file_name: basename(filePath),
 				file: fileStream,
+				...(duration && { duration }),
 			},
 		});
 
@@ -579,6 +587,66 @@ export class LarkClient {
 		}
 
 		return response.file_key;
+	}
+
+	/**
+	 * 检测文件类型
+	 */
+	private detectFileType(filePath: string): string {
+		const { extname } = require("path");
+		const ext = extname(filePath).toLowerCase();
+
+		const typeMap: Record<string, string> = {
+			".opus": "opus",
+			".ogg": "opus",
+			".mp4": "mp4",
+			".mov": "mp4",
+			".avi": "mp4",
+			".pdf": "pdf",
+			".doc": "doc",
+			".docx": "doc",
+			".xls": "xls",
+			".xlsx": "xls",
+			".ppt": "ppt",
+			".pptx": "ppt",
+		};
+
+		return typeMap[ext] || "stream";
+	}
+
+	/**
+	 * 发送语音消息
+	 * @param receiveId 接收者 ID
+	 * @param fileKey 文件 key（需先上传 OGG/Opus 格式音频）
+	 * @param duration 音频时长（毫秒，可选）
+	 */
+	async sendAudio(receiveId: string, fileKey: string, duration?: number): Promise<FeishuSendResult> {
+		this.logger?.debug("Sending audio message", { receiveId, fileKey, duration });
+
+		const response = await this.client.im.v1.message.create({
+			params: {
+				receive_id_type: "chat_id",
+			},
+			data: {
+				receive_id: receiveId,
+				msg_type: "audio",
+				content: JSON.stringify({
+					file_key: fileKey,
+					...(duration && { duration }),
+				}),
+			},
+		});
+
+		if (response.code !== 0) {
+			throw new Error(`Failed to send audio: [${response.code}] ${response.msg}`);
+		}
+
+		const messageId = response.data?.message_id;
+		if (!messageId) {
+			throw new Error("sendAudio succeeded but no message_id returned");
+		}
+
+		return { message_id: messageId };
 	}
 
 	/**

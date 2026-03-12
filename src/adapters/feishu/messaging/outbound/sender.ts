@@ -156,6 +156,18 @@ export class MessageSender {
 	}
 
 	/**
+	 * 发送语音消息
+	 * @param chatId 聊天 ID
+	 * @param fileKey 文件 key
+	 * @param duration 音频时长（毫秒，可选）
+	 */
+	async sendAudio(chatId: string, fileKey: string, duration?: number): Promise<string> {
+		this.logger?.debug("Sending audio message", { chatId, fileKey, duration });
+		const result = await this.larkClient.sendAudio(chatId, fileKey, duration);
+		return result.message_id;
+	}
+
+	/**
 	 * 在话题中回复
 	 */
 	async replyInThread(chatId: string, rootId: string, text: string): Promise<string> {

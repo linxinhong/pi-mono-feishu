@@ -155,10 +155,24 @@ export class FeishuPlatformContext implements PlatformContext {
 		return await this.messageSender.sendImage(chatId, imageKey);
 	}
 
-	async sendVoiceMessage(chatId: string, filePath: string): Promise<string> {
-		// 飞书需要先上传音频文件，然后发送
-		const fileKey = await this.larkClient.uploadFile(filePath);
-		return await this.messageSender.sendFile(chatId, fileKey);
+	async sendVoiceMessage(chatId: string, filePath: string, duration?: number): Promise<string> {
+		// 飞书语音消息需要 OGG/Opus 格式
+		// 1. 如果没有提供时长，自动检测
+		if (duration === undefined) {
+			duration = await this.detectAudioDuration(filePath);
+		}
+		// 2. 上传音频文件（指定类型为 opus）
+		const fileKey = await this.larkClient.uploadFile(filePath, "opus", duration);
+		// 3. 发送语音消息（使用 audio 类型，显示为可播放气泡）
+		return await this.messageSender.sendAudio(chatId, fileKey, duration);
+	}
+
+	/**
+	 * 检测音频时长
+	 */
+	private async detectAudioDuration(filePath: string): Promise<number | undefined> {
+		const { parseAudioDuration } = await import("./utils/audio-utils.js");
+		return await parseAudioDuration(filePath);
 	}
 
 	async postInThread(chatId: string, parentMessageId: string, text: string): Promise<string> {
