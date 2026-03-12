@@ -932,8 +932,18 @@ export class FeishuPlatformContext implements PlatformContext {
 		workspaceDir: string;
 		channelDir: string;
 	}): Promise<PlatformTool[]> {
-		// 暂时返回空数组，工具将在 tools/ 模块中实现
-		return [];
+		// 导入飞书特定工具
+		const { createSendFileTool, createSendVoiceTool, createTTSTool, createListVoicesTool, createSTTTool } = await import("./tools/index.js");
+
+		return [
+			// 文件和语音发送工具
+			createSendFileTool(this),
+			createSendVoiceTool(this),
+			// TTS/STT 工具
+			createTTSTool(this),
+			createListVoicesTool(),
+			createSTTTool(),
+		];
 	}
 
 	// ========================================================================
