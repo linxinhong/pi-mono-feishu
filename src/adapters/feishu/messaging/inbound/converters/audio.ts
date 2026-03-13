@@ -149,25 +149,21 @@ export async function convertAudioMessage(
 	let recognizedText: string;
 
 	try {
+		console.log("[Feishu Audio] Starting STT recognition...", { localPath });
 		const result = await sttProvider.transcribe({
 			audioPath: localPath,
 			language: options?.language || "zh",
 		});
 		recognizedText = result.text;
+		console.log("[Feishu Audio] STT success:", recognizedText.substring(0, 50) + "...");
 	} catch (error) {
-		console.error("[Feishu] STT failed:", error);
+		console.error("[Feishu Audio] STT failed:", error);
+		// 识别失败时返回错误信息，但不返回音频附件
+		// 避免 AI 重复调用 transcribe 工具
 		return {
 			content: durationStr
-				? `[语音消息 ${durationStr} - 识别失败]`
-				: "[语音消息 - 识别失败]",
-			attachments: [
-				{
-					name: fileName,
-					originalId: file_key,
-					localPath,
-					type: "audio",
-				},
-			],
+				? `[语音消息 ${durationStr} - 识别失败，请重试]`
+				: "[语音消息 - 识别失败，请重试]",
 		};
 	}
 
