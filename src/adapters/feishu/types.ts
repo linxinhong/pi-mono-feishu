@@ -45,6 +45,16 @@ export interface FeishuPolicyConfig {
 }
 
 /**
+ * STT 配置
+ */
+export interface FeishuSTTConfig {
+	/** STT 提供商：whisper | dashscope */
+	provider?: "whisper" | "dashscope";
+	/** 默认语言（如 "zh", "en"） */
+	language?: string;
+}
+
+/**
  * 响应配置
  */
 export interface FeishuResponseConfig {
@@ -56,6 +66,8 @@ export interface FeishuResponseConfig {
 	textChunkLimit?: number;
 	/** 媒体文件大小限制（MB） */
 	mediaMaxMb?: number;
+	/** STT 配置 */
+	stt?: FeishuSTTConfig;
 }
 
 /**

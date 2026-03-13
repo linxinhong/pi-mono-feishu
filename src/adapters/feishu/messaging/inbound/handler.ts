@@ -15,6 +15,7 @@ import { convertTextMessage } from "./converters/text.js";
 import { convertImageMessage } from "./converters/image.js";
 import { convertFileMessage } from "./converters/file.js";
 import { convertPostMessage } from "./converters/post.js";
+import { convertAudioMessage } from "./converters/audio.js";
 
 // ============================================================================
 // Types
@@ -282,6 +283,12 @@ export class MessageHandler {
 			case "file":
 			case "media":
 				return await convertFileMessage(context.content, context, this.store);
+
+			case "audio":
+				return await convertAudioMessage(context.content, context, this.store, {
+					sttProvider: this.config.stt?.provider,
+					language: this.config.stt?.language,
+				});
 
 			default:
 				// 尝试作为文本处理

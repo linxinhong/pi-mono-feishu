@@ -8,3 +8,4 @@ export { convertTextMessage } from "./text.js";
 export { convertImageMessage } from "./image.js";
 export { convertFileMessage } from "./file.js";
 export { convertPostMessage } from "./post.js";
+export { convertAudioMessage, parseAudioMessage } from "./audio.js";
