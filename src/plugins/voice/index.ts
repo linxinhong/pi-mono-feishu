@@ -12,7 +12,7 @@ import OpenAI from "openai";
 import { join } from "path";
 import type { Plugin, PluginContext, MessageEvent, PluginInitContext } from "../../core/plugin/types.js";
 import { CAPABILITIES } from "../../core/plugin/types.js";
-import { PROJECT_ROOT } from "../../utils/config.js";
+import { PROJECT_ROOT, getChannelDir } from "../../utils/config.js";
 import * as log from "../../utils/logger/index.js";
 
 // ============================================================================
@@ -162,7 +162,10 @@ function createTTSTool(
 				const { existsSync, mkdirSync } = await import("fs");
 
 				const execAsync = promisify(exec);
-				const scratchDir = join(context.channelDir, "scratch");
+				// 使用 getChannelDir 确保路径正确，避免依赖可能不正确的 context.channelDir
+				const channelId = context.message.channel;
+				const correctChannelDir = getChannelDir(channelId);
+				const scratchDir = join(correctChannelDir, "scratch");
 				if (!existsSync(scratchDir)) mkdirSync(scratchDir, { recursive: true });
 
 				const outputPath = join(scratchDir, `tts_${Date.now()}.mp3`);
