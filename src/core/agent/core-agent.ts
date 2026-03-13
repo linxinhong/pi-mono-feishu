@@ -716,6 +716,7 @@ export class CoreAgent {
 		// 添加插件工具
 		if (this.config.pluginManager) {
 			try {
+				log.logInfo("[Agent] Loading plugin tools...");
 				// 构建插件上下文
 				const pluginContext = {
 					message: {
@@ -749,7 +750,9 @@ export class CoreAgent {
 					},
 					config: {},
 				};
+				log.logInfo(`[Agent] Plugin context has sendVoiceMessage: ${!!pluginContext.capabilities.sendVoiceMessage}`);
 				const pluginTools = await this.config.pluginManager.getTools(pluginContext as any);
+				log.logInfo(`[Agent] Plugin tools count: ${pluginTools.length}`);
 				if (pluginTools && pluginTools.length > 0) {
 					baseTools.push(...pluginTools);
 					log.logInfo(`[Agent] Added ${pluginTools.length} plugin tools`);
