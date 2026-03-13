@@ -37,8 +37,8 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 				},
 				provider: {
 					type: "string",
-					description: "TTS 引擎提供商: 'edge'(默认,免费) 或 'dashscope'(阿里云)",
-					default: "edge",
+					description: "TTS 引擎提供商: 'dashscope'(阿里云,推荐中文) 或 'edge'(免费,英文)",
+					default: "dashscope",
 				},
 			},
 			required: ["text"],
@@ -50,7 +50,7 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 		},
 		execute: async (_toolCallId: string, params: any) => {
 			try {
-				const { text, voice = "zh-CN-XiaoxiaoNeural", speed = 1.0, provider = "edge" } = params;
+				const { text, voice = "zh-CN-XiaoxiaoNeural", speed = 1.0, provider = "dashscope" } = params;
 				const chatId = context["chatId"];
 
 				// 限制文本长度
