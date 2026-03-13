@@ -139,8 +139,10 @@ export class DashScopeTTS implements TTSProvider {
 			throw new Error(`TTS API returned no audio: ${result?.message || "Unknown error"}`);
 		}
 
-		// 确定输出路径
-		const outputPath = options.outputPath || join(homedir(), ".pi-claw", "scratch", `tts-${Date.now()}.wav`);
+		// 确定输出路径（DashScope 只返回 wav 格式，即使请求 opus）
+		const outputPath = options.outputPath 
+			? options.outputPath.replace(/\.opus$/i, ".wav")
+			: join(homedir(), ".pi-claw", "scratch", `tts-${Date.now()}.wav`);
 		
 		// 确保目录存在
 		const outputDir = dirname(outputPath);

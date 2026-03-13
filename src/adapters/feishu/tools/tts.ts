@@ -61,8 +61,8 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 					};
 				}
 
-				// 生成临时文件路径（使用 .opus，飞书语音需要此格式）
-				const tempPath = join(tmpdir(), `tts-${Date.now()}.opus`);
+				// 生成临时文件路径（DashScope TTS 只支持 WAV 输出）
+				const tempPath = join(tmpdir(), `tts-${Date.now()}.wav`);
 
 				// 使用 VoiceManager 合成语音
 				const voiceManager = getVoiceManager();
