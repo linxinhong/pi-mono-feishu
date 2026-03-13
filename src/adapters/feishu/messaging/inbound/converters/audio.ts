@@ -178,16 +178,10 @@ export async function convertAudioMessage(
 		? `[语音 ${durationStr}]: ${displayText}`
 		: `[语音]: ${displayText}`;
 
+	// 只返回识别后的文字，不返回音频附件
+	// 避免 AI 重复调用 transcribe 工具
 	return {
 		content: resultContent,
-		attachments: [
-			{
-				name: fileName,
-				originalId: file_key,
-				localPath,
-				type: "audio",
-			},
-		],
 	};
 }
 
