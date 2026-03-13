@@ -908,20 +908,55 @@ export class CoreAgent {
 			const maxMessages = 40;
 			const messages = loadedSession.messages.slice(-maxMessages);
 
+			// 验证消息历史：确保 toolResult 消息有对应的 tool_calls
+			const validMessages: typeof messages = [];
+			const pendingToolCalls = new Set<string>();
+			
+			for (const msg of messages) {
+				const role = (msg as any).role;
+				if (role === "assistant") {
+					// 记录这个 assistant 消息中的 tool_calls
+					const toolCalls = (msg as any).toolCalls || [];
+					for (const tc of toolCalls) {
+						if (tc.id) pendingToolCalls.add(tc.id);
+					}
+					validMessages.push(msg);
+				} else if (role === "toolResult") {
+					// 检查这个 toolResult 消息是否有对应的 tool_call
+					const toolCallId = (msg as any).toolCallId;
+					if (toolCallId && pendingToolCalls.has(toolCallId)) {
+						validMessages.push(msg);
+						pendingToolCalls.delete(toolCallId);
+					} else {
+						log.logWarning(`[Agent] Skipping orphaned toolResult message: ${toolCallId}`);
+					}
+				} else if (role === "user") {
+					validMessages.push(msg);
+					// 用户消息会开始新的 turn，清空 pending tool calls
+					pendingToolCalls.clear();
+				} else {
+					validMessages.push(msg);
+				}
+			}
+			
+			if (validMessages.length < messages.length) {
+				log.logWarning(`[Agent] Filtered out ${messages.length - validMessages.length} invalid messages`);
+			}
+
 			// 计算预估总长度
 			const systemPromptLength = systemPrompt.length;
-			const messagesLength = messages.reduce((sum, msg) =>
+			const messagesLength = validMessages.reduce((sum, msg) =>
 				sum + JSON.stringify(msg).length, 0);
 			const estimatedTotal = systemPromptLength + messagesLength;
 
 			// 如果超限，动态减少消息数量
-			let finalMessages = messages;
+			let finalMessages = validMessages;
 			if (estimatedTotal > 250000) {
 				const targetLength = 250000 - systemPromptLength;
-				const avgMsgLength = messagesLength / messages.length;
+				const avgMsgLength = messagesLength / validMessages.length;
 				const maxAllowed = Math.max(5, Math.floor(targetLength / avgMsgLength));
-				finalMessages = messages.slice(-maxAllowed);
-				log.logWarning(`[Agent] Reducing messages from ${messages.length} to ${finalMessages.length} due to length limit`);
+				finalMessages = validMessages.slice(-maxAllowed);
+				log.logWarning(`[Agent] Reducing messages from ${validMessages.length} to ${finalMessages.length} due to length limit`);
 			}
 
 			state.agent.replaceMessages(finalMessages);
