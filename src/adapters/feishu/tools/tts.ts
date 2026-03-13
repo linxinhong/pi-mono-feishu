@@ -61,7 +61,7 @@ export function createTTSTool(context: FeishuPlatformContext): PlatformTool {
 					};
 				}
 
-				// 生成临时文件路径
+				// 生成临时文件路径（使用 .opus，飞书语音需要此格式）
 				const tempPath = join(tmpdir(), `tts-${Date.now()}.opus`);
 
 				// 使用 VoiceManager 合成语音

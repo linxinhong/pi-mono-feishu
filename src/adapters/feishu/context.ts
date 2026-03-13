@@ -178,9 +178,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (duration === undefined) {
 			duration = await this.detectAudioDuration(filePath);
 		}
-		// 2. 上传音频文件（指定类型为 opus）
-		const fileKey = await this.larkClient.uploadFile(filePath, "opus", duration);
-		// 3. 发送语音消息（使用 audio 类型，显示为可播放气泡）
+		// 2. 根据文件扩展名确定类型
+		const isOpus = filePath.toLowerCase().endsWith(".opus");
+		const fileType = isOpus ? "opus" : "mp3";
+		// 3. 上传音频文件
+		const fileKey = await this.larkClient.uploadFile(filePath, fileType, duration);
+		// 4. 发送语音消息（使用 audio 类型，显示为可播放气泡）
 		return await this.messageSender.sendAudio(chatId, fileKey, duration);
 	}
 
