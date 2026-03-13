@@ -548,6 +548,7 @@ export class CoreAgent {
 
 							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
 							if ((platformContext as any).finishThinking) {
+								log.logInfo(`[Agent] Calling finishThinking with content: "${finalResponse.slice(0, 50)}...", stopReason: ${stopReason}`);
 								await (platformContext as any).finishThinking(finalResponse, stopReason);
 							}
 
