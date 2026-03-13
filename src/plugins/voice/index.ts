@@ -52,6 +52,7 @@ export const voicePlugin: Plugin = {
 	async getTools(context: PluginContext): Promise<AgentTool<any>[]> {
 		const tools: AgentTool<any>[] = [];
 		const sendVoiceMessage = context.capabilities.sendVoiceMessage;
+		log.logInfo(`[Voice Plugin] getTools called, sendVoiceMessage exists: ${!!sendVoiceMessage}`);
 
 		// TTS Tool - only if platform supports voice messages
 		if (sendVoiceMessage) {
