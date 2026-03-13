@@ -86,33 +86,12 @@ function extractPermissionScopes(msg: string): string {
 // ============================================================================
 
 /**
- * 从飞书 API 错误中提取权限错误信息
- *
- * @param err - Axios 错误对象
- * @returns 权限错误信息，如果不是权限错误则返回 null
+ * 从飞书错误对象中提取权限错误信息
  */
-export function extractPermissionError(err: unknown): PermissionError | null {
-	if (!err || typeof err !== "object") {
-		return null;
-	}
-
-	const axiosErr = err as any;
-	const data = axiosErr.response?.data;
-	if (!data || typeof data !== "object") {
-		return null;
-	}
-
-	const feishuErr = data;
-	// 飞书权限错误码
-	if (feishuErr.code !== 99991672) {
-		return null;
-	}
-
+function extractFromFeishuError(feishuErr: any): PermissionError | null {
 	const msg = feishuErr.msg ?? "";
 	const grantUrl = extractPermissionGrantUrl(msg);
-	if (!grantUrl) {
-		return null;
-	}
+	if (!grantUrl) return null;
 
 	return {
 		code: feishuErr.code,
@@ -120,6 +99,64 @@ export function extractPermissionError(err: unknown): PermissionError | null {
 		grantUrl,
 		scopes: extractPermissionScopes(msg),
 	};
+}
+
+/**
+ * 从飞书 API 错误中提取权限错误信息
+ *
+ * 支持多种错误结构：
+ * 1. 嵌套数组结构 [[axiosErr, feishuErr]] - SDK 合并错误
+ * 2. SDK 合并字段 - 直接在错误对象上有 code 和 msg
+ * 3. 标准 Axios 错误 - err.response.data
+ *
+ * @param err - 错误对象
+ * @returns 权限错误信息，如果不是权限错误则返回 null
+ */
+export function extractPermissionError(err: unknown): PermissionError | null {
+	if (!err || typeof err !== "object") {
+		return null;
+	}
+
+	// 路径 1: 嵌套数组结构 [[axiosErr, feishuErr]]
+	// 这种结构来自飞书 SDK 将多个错误合并返回
+	if (Array.isArray(err)) {
+		for (const item of err) {
+			if (Array.isArray(item)) {
+				// 嵌套数组 [[...]]
+				for (const subItem of item) {
+					if (subItem && typeof subItem === "object" && subItem.code === 99991672) {
+						const result = extractFromFeishuError(subItem);
+						if (result) return result;
+					}
+				}
+			} else if (item && typeof item === "object" && item.code === 99991672) {
+				// 扁平数组 [...]
+				const result = extractFromFeishuError(item);
+				if (result) return result;
+			}
+		}
+	}
+
+	// 路径 2: SDK 合并字段（直接在错误对象上）
+	// 飞书 SDK 有时会把错误信息直接放在顶层
+	const anyErr = err as any;
+	if (typeof anyErr.code === "number" && anyErr.msg) {
+		if (anyErr.code === 99991672) {
+			const result = extractFromFeishuError(anyErr);
+			if (result) return result;
+		}
+	}
+
+	// 路径 3: 标准 Axios 错误（err.response.data）
+	const data = anyErr.response?.data;
+	if (data && typeof data === "object") {
+		if (data.code === 99991672) {
+			const result = extractFromFeishuError(data);
+			if (result) return result;
+		}
+	}
+
+	return null;
 }
 
 // ============================================================================
