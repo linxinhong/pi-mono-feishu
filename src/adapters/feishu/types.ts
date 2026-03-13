@@ -131,7 +131,9 @@ export interface FeishuRawMessageBody {
 	/** 消息内容 */
 	content: string;
 	/** 消息类型 */
-	msg_type: string;
+	msg_type?: string;
+	/** 消息类型 (飞书事件中使用) */
+	message_type?: string;
 }
 
 /**
@@ -147,7 +149,9 @@ export interface FeishuRawMessage {
 	/** 聊天 ID */
 	chat_id: string;
 	/** 消息类型 */
-	msg_type: string;
+	msg_type?: string;
+	/** 消息类型 (飞书事件中使用) */
+	message_type?: string;
 	/** 消息内容（JSON 字符串） */
 	content: string;
 	/** 创建时间戳 */

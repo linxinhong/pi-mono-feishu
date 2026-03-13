@@ -73,7 +73,7 @@ export class MessageParser {
 				chatType,
 				rootId: message.root_id,
 				parentId: message.parent_id,
-				messageType: message.msg_type,
+				messageType: message.msg_type || (message as any).message_type,
 				content: message.content,
 				sender: senderInfo,
 				mentions,
