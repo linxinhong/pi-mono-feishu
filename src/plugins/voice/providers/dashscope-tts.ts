@@ -126,6 +126,12 @@ export class DashScopeTTS implements TTSProvider {
 
 		if (!response.ok) {
 			const errorText = await response.text();
+			console.error(`[DashScope TTS] API error (${response.status}): ${errorText}`);
+			console.error(`[DashScope TTS] Request body:`, JSON.stringify({
+				model: TTS_MODEL,
+				input: { text: text.slice(0, 50) + (text.length > 50 ? "..." : "") },
+				parameters: { voice, format: options.format }
+			}));
 			throw new Error(`DashScope TTS API error (${response.status}): ${errorText}`);
 		}
 
