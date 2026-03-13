@@ -145,8 +145,15 @@ export class FeishuStore implements PlatformStore {
 			await this.larkClient.downloadFile(fileKey, localPath);
 			this.logger?.debug("File downloaded", { fileKey, localPath });
 			return localPath;
-		} catch (error) {
+		} catch (error: any) {
 			this.logger?.error("Failed to download file", undefined, error as Error);
+			
+			// 检测权限错误并抛出，让上层处理
+			const errorStr = JSON.stringify(error);
+			if (errorStr.includes("99991672")) {
+				throw error;
+			}
+			
 			return null;
 		}
 	}
