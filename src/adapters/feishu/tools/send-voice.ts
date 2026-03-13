@@ -15,7 +15,7 @@ export function createSendVoiceTool(context: FeishuPlatformContext): PlatformToo
 	return {
 		name: "send_voice",
 		label: "🎤 发送语音",
-		description: "发送语音消息到当前聊天。支持 MP3、WAV、OGG、OPUS 格式。语音将以可播放的语音气泡形式显示。",
+		description: "【已有音频文件时使用】发送已有的语音文件到当前聊天。如果你需要将文字转为语音，请优先使用 `speak` 工具。支持 MP3、WAV、OGG、OPUS 格式。",
 		parameters: {
 			type: "object",
 			properties: {

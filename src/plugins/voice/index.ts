@@ -58,7 +58,7 @@ export const voicePlugin: Plugin = {
 			tools.push({
 				name: "speak",
 				label: "🔊 Text to Speech",
-				description: "Convert text to speech and send as voice message. Use this to reply with voice.",
+				description: "【推荐】Convert text to speech and send as voice message. Use this to reply with voice. This is the simplest way to send voice - it handles TTS and sending in one step.",
 				parameters: TTSSchema,
 				execute: async (_id, params: TTSParams) => {
 					try {
