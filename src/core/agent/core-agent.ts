@@ -424,7 +424,7 @@ export class CoreAgent {
 
 			// 订阅事件并响应
 			let finalResponse = "";
-			const responsePromise = new Promise<string>((resolve) => {
+			const responsePromise = new Promise<string>((resolve, reject) => {
 				// 取消之前的订阅（如果存在），防止订阅泄漏
 				if (state.unsubscribe) {
 					state.unsubscribe();
@@ -555,12 +555,13 @@ export class CoreAgent {
 							resolve(finalResponse);
 						}
 					} catch (error) {
-						// 检查是否是权限错误，如果是则重新抛出让上层处理
+						// 检查是否是权限错误，如果是则 reject Promise 让上层处理
 						const errorCode = (error as any)?.code ?? (error as any)?.response?.data?.code;
 						const errorMsg = String(error);
 						if (errorCode === 99991672 || errorMsg.includes("99991672")) {
-							log.logError(`[Agent] Permission error in event handler, re-throwing: ${error}`);
-							throw error;
+							log.logError(`[Agent] Permission error in event handler, rejecting promise: ${error}`);
+							reject(error);
+							return;
 						}
 						log.logError(`[Agent] Event handler error: ${error}`);
 					}
