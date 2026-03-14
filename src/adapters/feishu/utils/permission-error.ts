@@ -6,6 +6,7 @@
  */
 
 import type { FeishuPlatformContext } from "../context.js";
+import { extractLarkApiCode, extractLarkErrorMessage } from "../constants/errors.js";
 
 // ============================================================================
 // Types
@@ -67,59 +68,65 @@ export function toInAppWebUrl(targetUrl: string): string {
 
 /**
  * 从错误对象中提取权限错误
+ *
+ * 支持多种错误格式：
+ * 1. 数组格式: [[axiosError, feishuError]] - SDK 内部打印格式
+ * 2. SDK 合并格式: { code, msg } - SDK 直接挂载
+ * 3. AxiosError 格式: { response: { data: { code, msg } } } - HTTP 错误
+ *
  * @param err 错误对象
  * @returns PermissionError 或 null
  */
 export function extractPermissionError(err: unknown): PermissionError | null {
+	// 调试日志：帮助排查错误格式问题
+	console.log("[DEBUG] extractPermissionError input type:", typeof err);
+	console.log("[DEBUG] extractPermissionError is array:", Array.isArray(err));
+	console.log("[DEBUG] extractPermissionError has response.data:", !!(err as any)?.response?.data);
+
 	if (!err || typeof err !== "object") {
+		console.log("[DEBUG] extractPermissionError: invalid input, returning null");
 		return null;
 	}
 
-	let error = err as any;
-	
-	// 处理嵌套数组格式（如 [[axiosError, feishuError]]）
+	const error = err as Record<string, unknown>;
+
+	// 策略 1: 处理嵌套数组格式（如 [[axiosError, feishuError]]）
+	// 这是 SDK 内部打印的格式，通常在 console.error 中看到
 	if (Array.isArray(error)) {
-		// 展平所有层级
-		const flattened = error.flat(Infinity);
-		
-		// 首先查找包含 code === 99991672 的对象
-		for (const item of flattened) {
-			if (item && typeof item === "object" && item.code === 99991672 && item.msg) {
-				error = item;
-				break;
-			}
-		}
-		
-		// 如果没找到，再查找包含 response?.data?.code === 99991672 的对象
-		if (error?.code !== 99991672) {
-			for (const item of flattened) {
-				if (item?.response?.data?.code === 99991672) {
-					error = item.response.data;
-					break;
-				}
-			}
+		const result = extractFromArray(error);
+		if (result) {
+			console.log("[DEBUG] extractPermissionError: found in array format");
+			return result;
 		}
 	}
-	
-	// 检查是否是飞书 API 错误
-	const code = error?.code;
-	const msg = error?.msg;
 
-	// 飞书权限错误码
+	// 策略 2: 使用统一的错误提取函数
+	// 支持: error.code, error.response.data.code, error.data.code
+	const code = extractLarkApiCode(error);
+	console.log("[DEBUG] extractPermissionError extracted code:", code);
+
 	if (code !== 99991672) {
+		console.log("[DEBUG] extractPermissionError: code is not 99991672, returning null");
 		return null;
 	}
+
+	// 提取错误消息
+	const msg = extractLarkErrorMessage(error);
+	console.log("[DEBUG] extractPermissionError extracted msg:", msg?.substring(0, 100));
 
 	if (!msg || typeof msg !== "string") {
+		console.log("[DEBUG] extractPermissionError: no message found, returning null");
 		return null;
 	}
 
 	// 提取授权 URL
 	const grantUrl = extractPermissionGrantUrl(msg);
 	if (!grantUrl) {
+		console.log("[DEBUG] extractPermissionError: no grant URL in message, returning null");
 		return null;
 	}
 
+	console.log("[DEBUG] extractPermissionError: successfully extracted permission error");
 	// 提取权限列表
 	const scopes = extractPermissionScopes(msg);
 
@@ -129,6 +136,55 @@ export function extractPermissionError(err: unknown): PermissionError | null {
 		grantUrl,
 		scopes,
 	};
+}
+
+/**
+ * 从数组格式中提取权限错误
+ */
+function extractFromArray(arr: unknown[]): PermissionError | null {
+	// 展平所有层级
+	const flattened = arr.flat(Infinity);
+
+	// 首先查找包含 code === 99991672 的对象
+	for (const item of flattened) {
+		if (item && typeof item === "object") {
+			const obj = item as Record<string, unknown>;
+			if (obj.code === 99991672 && typeof obj.msg === "string") {
+				const grantUrl = extractPermissionGrantUrl(obj.msg as string);
+				if (grantUrl) {
+					return {
+						code: 99991672,
+						message: obj.msg as string,
+						grantUrl,
+						scopes: extractPermissionScopes(obj.msg as string),
+					};
+				}
+			}
+		}
+	}
+
+	// 查找包含 response?.data?.code === 99991672 的对象
+	for (const item of flattened) {
+		if (item && typeof item === "object") {
+			const data = (item as Record<string, unknown>)?.response as Record<string, unknown> | undefined;
+			if (data?.data && typeof data.data === "object") {
+				const responseData = data.data as Record<string, unknown>;
+				if (responseData.code === 99991672 && typeof responseData.msg === "string") {
+					const grantUrl = extractPermissionGrantUrl(responseData.msg as string);
+					if (grantUrl) {
+						return {
+							code: 99991672,
+							message: responseData.msg as string,
+							grantUrl,
+							scopes: extractPermissionScopes(responseData.msg as string),
+						};
+					}
+				}
+			}
+		}
+	}
+
+	return null;
 }
 
 /**
