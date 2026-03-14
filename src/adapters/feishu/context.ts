@@ -239,6 +239,24 @@ export class FeishuPlatformContext implements PlatformContext {
 	// ========================================================================
 
 	/**
+	 * 发送纯文本回复（不转换 @ 提及，避免权限死循环）
+	 * 用于发送授权提示等需要避免权限检查的场景
+	 *
+	 * 关键：此方法直接调用 larkClient.sendText/replyText，不经过 convertAtMentions，
+	 * 因此不会触发 getChatMembers 权限检查，避免死循环。
+	 */
+	async sendReplyText(chatId: string, text: string, replyToMessageId?: string): Promise<string> {
+		// 直接使用 larkClient 的方法，不调用 convertAtMentions
+		if (replyToMessageId) {
+			const result = await this.larkClient.replyText(replyToMessageId, text);
+			return result.message_id ?? "";
+		} else {
+			const result = await this.larkClient.sendText(chatId, text);
+			return result.message_id ?? "";
+		}
+	}
+
+	/**
 	 * 发送卡片消息
 	 */
 	async sendCard(chatId: string, card: any): Promise<string> {

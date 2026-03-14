@@ -496,7 +496,17 @@ export function buildAuthFailedCard(reason: string): Record<string, unknown> {
 // ============================================================================
 
 /**
- * 发送权限授权卡片
+ * 发送权限授权提示（使用纯文本，避免权限死循环）
+ *
+ * 注意：这里不能使用 sendCard，因为 sendCard 内部会调用 convertAtMentions，
+ * 而 convertAtMentions 需要 getChatMembers 权限，会导致死循环：
+ *
+ * handleError() → sendAuthCard() → sendCard() → convertAtMentions() → getChatMembers()
+ *     ↑ 权限不足                                              ↓
+ *     └──────────────────── 抛出权限错误 ←─────────────────────┘
+ *
+ * 解决方案：使用 sendReplyText 直接发送纯文本，不调用 convertAtMentions
+ *
  * @param context 飞书平台上下文
  * @param permissionError 权限错误信息
  */
@@ -505,12 +515,14 @@ export async function sendAuthCard(
 	permissionError: PermissionError,
 ): Promise<void> {
 	const { grantUrl, scopes } = permissionError;
+	const chatId = context["chatId"];
+	const replyToMessageId = context["quoteMessageId"] ?? undefined;
 
-	// 构建授权卡片
-	const card = buildAuthCard({ grantUrl, scopes });
+	// 使用纯文本 + reply-to 发送授权提示，避免权限死循环
+	const scopeText = scopes?.length ? scopes.join(", ") : "未知权限";
+	const text = `⚠️ 应用缺少以下权限，请前往开通：\n\n权限：${scopeText}\n\n授权链接：${grantUrl}`;
 
-	// 发送卡片
-	await context.sendCard(context["chatId"], card);
+	await context.sendReplyText(chatId, text, replyToMessageId);
 }
 
 /**
