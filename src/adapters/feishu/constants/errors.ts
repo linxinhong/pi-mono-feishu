@@ -129,6 +129,8 @@ export function extractLarkApiCode(error: unknown): number | undefined {
 
 /**
  * 从飞书 API 错误中提取错误信息
+ *
+ * 检查顺序：优先提取飞书真实错误（response.data），再回退到通用错误
  */
 export function extractLarkErrorMessage(error: unknown): string | undefined {
 	if (!error || typeof error !== "object") {
@@ -137,17 +139,7 @@ export function extractLarkErrorMessage(error: unknown): string | undefined {
 
 	const err = error as Record<string, unknown>;
 
-	// 直接检查 error.msg
-	if (typeof err.msg === "string") {
-		return err.msg;
-	}
-
-	// 检查 error.message
-	if (typeof err.message === "string") {
-		return err.message;
-	}
-
-	// 检查 error.response.data.msg
+	// 优先检查 error.response.data（飞书真实错误消息）
 	const response = err.response as Record<string, unknown> | undefined;
 	if (response) {
 		const data = response.data as Record<string, unknown> | undefined;
@@ -159,6 +151,16 @@ export function extractLarkErrorMessage(error: unknown): string | undefined {
 				return data.message;
 			}
 		}
+	}
+
+	// 检查 error.msg
+	if (typeof err.msg === "string") {
+		return err.msg;
+	}
+
+	// 兜底：检查 error.message（如 Axios 的 "Request failed with status code 400"）
+	if (typeof err.message === "string") {
+		return err.message;
 	}
 
 	return undefined;
