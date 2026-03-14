@@ -5,6 +5,7 @@
  */
 
 import type { CardStatus, ToolCallInfo, TimelineEvent } from "../types.js";
+import { splitReasoningText, formatReasoningDuration } from "./reasoning-parser.js";
 
 // ============================================================================
 // Types
@@ -216,25 +217,45 @@ export class CardBuilder {
 		thinkingContent?: string;
 		timeline?: TimelineEvent[];
 		expanded?: boolean;  // 折叠面板是否展开（完成后应该折叠）
+		reasoningElapsedMs?: number;  // 思考耗时（毫秒）
 	}): Card {
 		const elements: CardElement[] = [];
 
-		// 1. 先添加主要内容
+		// 分离思考和回答内容
+		const { reasoningText, answerText } = splitReasoningText(content);
+
+		// 1. 思考内容折叠面板（如果有）
+		if (reasoningText) {
+			const durationLabel = options?.reasoningElapsedMs
+				? formatReasoningDuration(options.reasoningElapsedMs)
+				: "Thought";
+			elements.push({
+				tag: "collapsible_panel",
+				expanded: false,
+				header: {
+					title: { tag: "plain_text", content: `💭 ${durationLabel}` },
+				},
+				elements: [{ tag: "markdown", content: reasoningText, text_size: "notation" }],
+			} as CardElement);
+		}
+
+		// 2. 主要内容（回答部分，如果没有分离出思考内容则使用原文）
+		const displayContent = answerText || content;
 		elements.push({
 			tag: "div",
 			text: {
 				tag: "lark_md",
-				content: this.formatContent(content),
+				content: this.formatContent(displayContent),
 			},
 		});
 
-		// 2. 添加时间线折叠面板（思考过程在主要内容下方）
+		// 3. 添加时间线折叠面板（思考过程在主要内容下方）
 		if (options?.timeline && options.timeline.length > 0) {
 			// 完成时折叠面板（expanded 默认为 false）
 			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
 		}
 
-		// 3. 最后添加页脚信息
+		// 4. 最后添加页脚信息
 		if (options?.elapsed !== undefined) {
 			elements.push({
 				tag: "markdown",

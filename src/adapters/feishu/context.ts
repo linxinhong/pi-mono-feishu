@@ -13,6 +13,7 @@ import type { PiLogger } from "../../utils/logger/index.js";
 import type { ToolCallInfo, MultiCardIds, TimelineEvent } from "./types.js";
 import { CardBuilder } from "./card/builder.js";
 import { extractPermissionError, shouldNotifyPermissionError, sendAuthCard } from "./utils/permission-error.js";
+import { isMessageUnavailable, isMessageUnavailableError } from "./utils/message-unavailable.js";
 
 // ============================================================================
 // Types
@@ -63,6 +64,10 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	// 思考内容（流式累积）
 	private thinkingContent: string = "";
+
+	// Reasoning（思考内容解析）耗时追踪
+	private reasoningStartTime: number | null = null;
+	private reasoningElapsedMs: number = 0;
 
 	// 累积的工具调用信息
 	private toolCalls: ToolCallInfo[] = [];
@@ -314,6 +319,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 执行实际的卡片更新
 	 */
 	private async doFlushCardUpdate(): Promise<void> {
+		// 前置检查：消息是否仍然可用
+		if (isMessageUnavailable(this.quoteMessageId ?? undefined)) {
+			this.logger?.debug("Skipping card update - message unavailable", { quoteMessageId: this.quoteMessageId });
+			return;
+		}
+
 		if (!this.pendingContent) return;
 
 		const content = this.pendingContent;
@@ -559,13 +570,18 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
+		// 记录 reasoning 开始时间（首次调用时）
+		if (!this.reasoningStartTime) {
+			this.reasoningStartTime = Date.now();
+		}
+
 		// 检查内容是否有实质性变化（至少新增10个字符或完全不同的内容）
-		const contentChanged = content.length > this.thinkingContent.length + 10 || 
+		const contentChanged = content.length > this.thinkingContent.length + 10 ||
 		                       !content.startsWith(this.thinkingContent);
-		
+
 		// 更新思考内容
 		this.thinkingContent = content;
-		
+
 		// 只有当内容有实质性变化时才添加到时间线
 		if (contentChanged) {
 			this.addThinkingToTimeline(content);
@@ -582,9 +598,15 @@ export class FeishuPlatformContext implements PlatformContext {
 			if (this.toolCardUpdateTimer) {
 				clearTimeout(this.toolCardUpdateTimer);
 			}
-			
+
 			// 设置新的防抖定时器
 			this.toolCardUpdateTimer = setTimeout(async () => {
+				// 前置检查：消息是否仍然可用
+				if (isMessageUnavailable(this.cardIds.toolCardId ?? undefined)) {
+					this.logger?.debug("Skipping tool card update - message unavailable");
+					return;
+				}
+
 				try {
 					const timeline = this.getTimeline();
 					// 思考过程中展开折叠面板
@@ -612,6 +634,11 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
+		// 计算 reasoning 耗时
+		if (this.reasoningStartTime) {
+			this.reasoningElapsedMs = Date.now() - this.reasoningStartTime;
+		}
+
 		// 获取时间线
 		const timeline = this.getTimeline();
 
@@ -634,6 +661,7 @@ export class FeishuPlatformContext implements PlatformContext {
 					toolCalls: this.toolCalls,
 					timeline,
 					expanded: false,  // 完成时折叠
+					reasoningElapsedMs: this.reasoningElapsedMs,  // 传递思考耗时
 				});
 				// 转换卡片内容中的 @用户名
 				if (finalCard?.body?.elements) {
@@ -650,16 +678,23 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 标记响应已发送，防止 unified-bot 重复发送
 				this._responseSent = true;
 			} catch (error: any) {
+				// 检查是否是消息不可用错误（消息已撤回/删除）
+				if (isMessageUnavailableError(error)) {
+					this.logger?.debug("Card update skipped - message unavailable");
+					this._responseSent = true;
+					return;
+				}
+
 				const errorMsg = String(error?.message || error);
 				const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
 				const errorCode = error?.code ?? error?.response?.data?.code;
-				
+
 				// 检查是否是权限错误 (code 99991672) - 需要重新抛出以显示授权卡片
 				if (errorCode === 99991672) {
 					this.logger?.warn("Permission error in finishStreaming, re-throwing for auth card", { errorMsg });
 					throw error;
 				}
-				
+
 				if (!isRateLimit) {
 					this.logger?.error("Failed to update final card", undefined, error as Error);
 				}
@@ -687,6 +722,10 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.thinkingContent = "";
 			this.pendingContent = "";
 			this._responseSent = true;
+
+			// 重置 reasoning 耗时追踪
+			this.reasoningStartTime = null;
+			this.reasoningElapsedMs = 0;
 
 			// 重置卡片 ID
 			this.cardIds = {

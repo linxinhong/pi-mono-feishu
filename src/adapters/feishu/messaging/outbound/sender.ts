@@ -8,6 +8,7 @@ import type { UniversalResponse, CardContent } from "../../../../core/platform/m
 import type { LarkClient } from "../../client/index.js";
 import type { PiLogger } from "../../../../utils/logger/index.js";
 import { normalizeAtMentions } from "../../utils/mention.js";
+import { runWithMessageUnavailableGuard } from "../../utils/message-unavailable.js";
 
 // ============================================================================
 // Types
@@ -140,10 +141,15 @@ export class MessageSender {
 
 	/**
 	 * 更新卡片消息
+	 * 使用消息不可用守卫保护，避免对已撤回/删除的消息进行更新
 	 */
 	async updateCard(messageId: string, card: CardContent | any): Promise<void> {
 		this.logger?.debug("Updating card message", { messageId });
-		await this.larkClient.updateCard(messageId, card);
+		await runWithMessageUnavailableGuard({
+			messageId,
+			operation: 'updateCard',
+			fn: () => this.larkClient.updateCard(messageId, card),
+		});
 	}
 
 	/**
